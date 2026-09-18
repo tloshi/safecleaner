@@ -29,6 +29,26 @@ swift docs/analysis/probe-ceiling.swift
   Docker socket), not Trash moves.
 - `spctl` **rejects** the current build — friends cannot open it. Fix is a free Developer ID cert.
 
+## Status since the audit (19 September 2026)
+
+The reports below are dated records of what was measured on 18 September and are left unedited.
+What has changed since, per `docs/VALIDATION.md`:
+
+| Audit item | State |
+|---|---|
+| A1 ad-hoc signing, `spctl` rejected | **Fixed** — Developer ID, notarized and stapled |
+| A2 SwiftPM rule dead by construction | **Fixed** — root package exemption; rules now total 1,65 GB |
+| A6 no LICENSE | **Fixed** — proprietary EULA at the repo root |
+| A6 history schema / fail-closed forever | **Fixed** — versioned envelope, 0.2 migration, in-app reset |
+| A7 missing store artifacts | **Fixed** — `PrivacyInfo.xcprivacy`, `Assets.car`, category |
+| A8 arm64-only binary | **Fixed** — universal, `minos 14.0` on both slices |
+| A9 `autoreleasepool` in `walk` | **Applied** — perf delta not independently re-measured |
+| A4 whole-tree package/symlink rejection | **Open** — the 8.2 GB DerivedData headline; needs the fixture and a design pass first |
+| A5 no diagnosability / `os.Logger` | **Open** |
+| B* rule coverage, `Table`, a11y, update channel | **Open** |
+
+Note the headline numbers below predate A2 and are stale on that point.
+
 ## Open items — do not treat the strategy as settled
 
 - **0 of 4 load-bearing Apple claims were confirmed** (3 contested, 1 refuted). The strategists were

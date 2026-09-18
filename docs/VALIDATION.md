@@ -1,5 +1,41 @@
 # Validation
 
+## Unreleased — audit remediation, 19 September 2026
+
+Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
+
+- **Candidate-root package exemption.** `~/Library/Caches/org.swift.swiftpm` carries a `.swiftpm`
+  extension, so `isPackage` was true for the candidate root and `FileSafety.snapshot` threw before
+  reading a child — the Swift package cache rule was dead on every Mac. The guard now exempts the
+  root only. Measured on the author's machine with `probe-guards.swift`: that rule went
+  `REFUSED (package)` → `ACCEPTED [973,8 MB, 689 files]`, and the seven developer rules together
+  went **674,3 MB → 1,65 GB**. Two new tests cover the root exemption and that a *nested* package is
+  still refused; the guard had no test at all before.
+- **Activity history is now a versioned envelope.** Cleanup is gated on the history being readable,
+  so a record-shape change in 0.3 would have paused cleanup for every 0.2 install with no recovery.
+  Decoding falls back to the bare array 0.2 wrote, so existing files migrate on next save. A file
+  from a newer schema is refused rather than partially read, so a downgrade cannot overwrite it with
+  a truncated history. 5 new tests.
+- **Recovery path for an unreadable history.** The Activity screen offers "Start a new history" when,
+  and only when, the stored file cannot be read. A failed reset is not treated as a recovery — the
+  in-memory history is cleared only after the empty file is written. 4 new tests across the
+  repository and ViewModel.
+- **Per-child `autoreleasepool` in `FileSafety.walk`.** Applied as the audit recommended. Correctness
+  is covered by the existing suite; the peak-memory improvement is the audit's measurement, **not
+  independently re-measured here.**
+- Regression: **44 XCTest tests passed** (17 filesystem safety, 9 repository, 5 history format,
+  13 ViewModel), boundary checker passed, `xcodebuild` Debug build succeeded.
+
+### Not performed
+
+- No release build, signing or notarization run since these changes. `build/` still holds the 0.2.1
+  artifacts, whose bundled copyright string is stale.
+- The DerivedData refusal (audit item A4, the 8.2 GB headline) is **untouched**. It needs the
+  per-entry guard redesign and a realistic fixture first; the audit's own framing of that fix is
+  noted as incoherent in `docs/analysis/README.md`.
+- The reset control was verified through the ViewModel, not by driving the real UI.
+- No real cleanup was performed. Tests use synthetic files and in-memory fakes throughout.
+
 ## 0.2.1 — distribution packaging, 18 September 2026
 
 - Universal build: `swift build -c release --arch arm64 --arch x86_64` passed. `lipo -archs` reports
