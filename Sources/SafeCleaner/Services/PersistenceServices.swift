@@ -20,12 +20,14 @@ import SafeCleanerCore
 actor JSONHistoryStore: HistoryStoring {
     private let url: URL
     init(url: URL) { self.url = url }
+    // File I/O only. The format, its version and the 0.2 fallback live in HistoryFile,
+    // in Core, where they are testable without a bundle.
     func load() throws -> [CleanupRecord] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        return try JSONDecoder().decode([CleanupRecord].self, from: Data(contentsOf: url))
+        return try HistoryFile.decode(Data(contentsOf: url))
     }
     func save(_ records: [CleanupRecord]) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(records).write(to: url, options: .atomic)
+        try HistoryFile.encode(records).write(to: url, options: .atomic)
     }
 }
