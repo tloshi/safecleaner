@@ -52,6 +52,26 @@ final class SafetyTests: XCTestCase {
         try FileManager.default.linkItem(at: original, to: home.appendingPathComponent("cache/link"))
         XCTAssertThrowsError(try FileSafety.snapshot(home.appendingPathComponent("cache"), root: home))
     }
+    // ~/Library/Caches/org.swift.swiftpm carries a .swiftpm extension, so the candidate
+    // ROOT reports isPackage. Refusing it there made the Swift package cache rule dead on
+    // every Mac. The root is the unit the rule nominates and the user confirms, and it is
+    // also the unit trashItem moves whole, so measuring it is coherent.
+    func testCandidateRootMayItselfBeAPackage() throws {
+        try file("org.swift.swiftpm/repositories/pkg/data")
+        let root = home.appendingPathComponent("org.swift.swiftpm")
+        XCTAssertTrue(try root.resourceValues(forKeys: [.isPackageKey]).isPackage == true,
+                      "fixture precondition: .swiftpm must register as a package")
+        let stamp = try FileSafety.snapshot(root, root: home)
+        XCTAssertGreaterThan(stamp.logicalBytes, 0)
+        XCTAssertEqual(stamp.fileCount, 1)
+    }
+    // The exemption is for the root only. A package found inside a candidate is still
+    // refused: the user reviewed the root, not its interior.
+    func testNestedPackageIsStillRefused() throws {
+        try file("cache/normal")
+        try file("cache/Some.app/Contents/data")
+        XCTAssertThrowsError(try FileSafety.snapshot(home.appendingPathComponent("cache"), root: home))
+    }
     func testChangedFilesNeverReachTrashOperation() throws {
         let url = try file("cache/data")
         let item = try candidate("cache")

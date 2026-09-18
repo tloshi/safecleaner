@@ -38,7 +38,7 @@ public enum FileSafety {
         var count = 0
         var visited = Set<String>()
 
-        func record(_ entry: URL) throws {
+        func record(_ entry: URL, isRoot: Bool) throws {
             try Task.checkCancellation()
             let attrs = try fm.attributesOfItem(atPath: entry.path)
             let type = attrs[.type] as? FileAttributeType
@@ -49,7 +49,13 @@ public enum FileSafety {
                 throw SafetyError.refused("Cross-volume folders are excluded.")
             }
             let values = try entry.resourceValues(forKeys: [.fileAllocatedSizeKey, .isPackageKey])
-            if values.isPackage == true {
+            // A package *inside* a candidate is still refused: the user reviewed the root,
+            // not its interior. The root itself is exempt, because it is the unit the rule
+            // nominated, the unit the user confirms, and the unit trashItem moves whole —
+            // so measuring it cannot diverge from what is moved. Without this exemption a
+            // candidate whose own name carries a package extension is dead by construction,
+            // which is what silently disabled the ~/Library/Caches/org.swift.swiftpm rule.
+            if values.isPackage == true && !isRoot {
                 throw SafetyError.refused("Contains a package; this version leaves it untouched.")
             }
             let inode = (attrs[.systemFileNumber] as? NSNumber)?.stringValue ?? "unknown"
@@ -70,16 +76,18 @@ public enum FileSafety {
 
         // Explicit traversal makes ordering stable and errors observable. No symlinks,
         // unreadable subtrees, or packages can silently disappear from an estimate.
-        func walk(_ entry: URL) throws {
-            try record(entry)
+        func walk(_ entry: URL, isRoot: Bool = false) throws {
+            try record(entry, isRoot: isRoot)
             let attrs = try fm.attributesOfItem(atPath: entry.path)
             if attrs[.type] as? FileAttributeType == .typeDirectory {
                 let children = try fm.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil)
                     .sorted { $0.lastPathComponent < $1.lastPathComponent }
-                for child in children { try walk(child) }
+                // The per-child pool keeps peak memory flat on large trees. Without it the
+                // autoreleased attribute dictionaries accumulate for the whole traversal.
+                for child in children { try autoreleasepool { try walk(child) } }
             }
         }
-        try walk(url)
+        try walk(url, isRoot: true)
         return TreeStamp(digest: digest.finalize().map { String(format: "%02x", $0) }.joined(),
                          logicalBytes: logical, allocatedBytes: allocated, fileCount: count)
     }

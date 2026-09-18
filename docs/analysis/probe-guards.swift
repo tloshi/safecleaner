@@ -10,7 +10,7 @@ func probe(_ url: URL) -> (String, Int64, Int) {
     guard let base = try? fm.attributesOfItem(atPath: url.path) else { return ("MISSING", 0, 0) }
     let device = base[.systemNumber] as? NSNumber
     var bytes: Int64 = 0, count = 0
-    func record(_ e: URL) throws {
+    func record(_ e: URL, isRoot: Bool) throws {
         let a = try fm.attributesOfItem(atPath: e.path)
         let t = a[.type] as? FileAttributeType
         guard t == .typeDirectory || t == .typeRegular else {
@@ -18,19 +18,21 @@ func probe(_ url: URL) -> (String, Int64, Int) {
         guard a[.systemNumber] as? NSNumber == device else {
             throw Refusal.reason("cross-volume", e.path) }
         let v = try e.resourceValues(forKeys: [.fileAllocatedSizeKey, .isPackageKey])
-        if v.isPackage == true { throw Refusal.reason("package", e.path) }
+        // Mirrors the root exemption in FileSafety.record. Keep the two in step:
+        // this probe is only useful while it is a faithful replica.
+        if v.isPackage == true && !isRoot { throw Refusal.reason("package", e.path) }
         if t == .typeRegular, (a[.referenceCount] as? NSNumber)?.intValue ?? 1 > 1 {
             throw Refusal.reason("hard link", e.path) }
         if t == .typeRegular { bytes += Int64(v.fileAllocatedSize ?? 0); count += 1 }
     }
-    func walk(_ e: URL) throws {
-        try record(e)
+    func walk(_ e: URL, isRoot: Bool = false) throws {
+        try record(e, isRoot: isRoot)
         if (try fm.attributesOfItem(atPath: e.path))[.type] as? FileAttributeType == .typeDirectory {
             for c in (try fm.contentsOfDirectory(at: e, includingPropertiesForKeys: nil))
                 .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) { try walk(c) }
         }
     }
-    do { try walk(url); return ("ACCEPTED", bytes, count) }
+    do { try walk(url, isRoot: true); return ("ACCEPTED", bytes, count) }
     catch let Refusal.reason(why, where_) {
         return ("REFUSED (\(why)): \(where_.replacingOccurrences(of: home.path, with: "~"))", bytes, count) }
     catch { return ("ERROR: \(error.localizedDescription)", bytes, count) }
