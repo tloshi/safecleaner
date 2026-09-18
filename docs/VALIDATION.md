@@ -26,14 +26,42 @@ Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
 - Regression: **44 XCTest tests passed** (17 filesystem safety, 9 repository, 5 history format,
   13 ViewModel), boundary checker passed, `xcodebuild` Debug build succeeded.
 
+- **Measure the whole subtree instead of refusing it (audit A4).** Interior symlinks and packages
+  are counted rather than refused. `trashItem` renames the subtree, so the unit that moves is the
+  whole tree and the unit measured now matches it. The audit proposed *skipping* those entries and
+  then objected — correctly — that skipping makes `TreeStamp` stop describing what moves; including
+  them resolves that. The ancestor symlink check in `validate` is unchanged and remains the
+  load-bearing guard. One existing test was rewritten: it asserted a symlink target survived a
+  snapshot that had already refused, which proved nothing about the move; it now executes the
+  cleanup and asserts the target survives and the link moves intact. Measured:
+  DerivedData `REFUSED` → **`ACCEPTED 8,95 GB`**; developer rules 1,65 GB → **10,6 GB**.
+- **Project build output is cleanable.** `canTrash: false` was hardcoded on every project candidate.
+  Detection was also skipping `node_modules`/`Pods`/`vendor` and all dotfolders, and matched only
+  fixed manifest filenames — so `iosApp/build` (4,14 GB, the largest single item) was invisible and
+  the scanner descended into it, emitting 2,359 depth-limit issues. Rules now require a manifest
+  beside the directory, including by extension for `.xcodeproj`/`.xcworkspace`. `dist` and `out` are
+  deliberately excluded as ambiguous. Staleness is the build directory's own mtime, which is not the
+  same signal as repo activity.
+- **End-to-end against the author's real `~/AndroidStudioProjects`, driving the actual `DiskScanner`:**
+  81 project candidates, **30,1 GB**, all cleanable, 20,2 GB idle 30+ days. All categories:
+  **214 candidates, 46,27 GB** — against the 1,83 GB the audit measured. Scan issues 2,372 → 14.
+- Regression after these changes: **51 XCTest tests passed** (18 filesystem safety, 9 repository,
+  7 build output, 5 history format, 13 ViewModel — with one deliberate policy assertion rewritten as
+  described above), boundary checker passed, `xcodebuild` Debug build succeeded.
+
 ### Not performed
 
 - No release build, signing or notarization run since these changes. `build/` still holds the 0.2.1
   artifacts, whose bundled copyright string is stale.
-- The DerivedData refusal (audit item A4, the 8.2 GB headline) is **untouched**. It needs the
-  per-entry guard redesign and a realistic fixture first; the audit's own framing of that fix is
-  noted as incoherent in `docs/analysis/README.md`.
-- The reset control was verified through the ViewModel, not by driving the real UI.
+- **No cleanup has actually been executed against the real candidates.** Everything above is
+  measurement through the real scanner; no file on the author's machine has been moved to Trash by
+  the new rules. Do that on one small candidate before trusting a 30 GB batch.
+- 7 build directories still refuse on interior hard links, and 3 on cross-volume or special files.
+  Neither was investigated.
+- The reset control and the build-output list were verified through the ViewModel and scanner, not
+  by driving the real UI.
+- The 30-day idle threshold is displayed, not enforced: nothing filters or sorts by it yet, so the
+  user still reads the age per row.
 - No real cleanup was performed. Tests use synthetic files and in-memory fakes throughout.
 
 ## 0.2.1 — distribution packaging, 18 September 2026

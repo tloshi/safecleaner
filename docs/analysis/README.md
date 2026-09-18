@@ -43,11 +43,17 @@ What has changed since, per `docs/VALIDATION.md`:
 | A7 missing store artifacts | **Fixed** — `PrivacyInfo.xcprivacy`, `Assets.car`, category |
 | A8 arm64-only binary | **Fixed** — universal, `minos 14.0` on both slices |
 | A9 `autoreleasepool` in `walk` | **Applied** — perf delta not independently re-measured |
-| A4 whole-tree package/symlink rejection | **Open** — the 8.2 GB DerivedData headline; needs the fixture and a design pass first |
+| A4 whole-tree package/symlink rejection | **Fixed** — measure the subtree rather than refuse it; DerivedData now ACCEPTED 8,95 GB |
+| B2 rules that reach real bytes | **Partly** — project build output is cleanable; tool-API rules (simctl, Docker, sdkmanager) still open |
 | A5 no diagnosability / `os.Logger` | **Open** |
 | B* rule coverage, `Table`, a11y, update channel | **Open** |
 
-Note the headline numbers below predate A2 and are stale on that point.
+Note the headline numbers below are stale. Measured 19 September with the real scanner:
+**214 candidates, 46,27 GB** (the reports say 1,83 GB), of which 30,1 GB is project build output.
+
+The reports also mis-frame the biggest item. They treat tool caches as the target; the author's
+actual 200 GB DaisyDisk pass was mostly **build files in projects left untouched**, which regrew
+32 GB in one month. That is a recurring ~30 GB/month, not a one-off hunt.
 
 ## Open items — do not treat the strategy as settled
 
