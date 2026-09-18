@@ -6,9 +6,15 @@ import SafeCleanerPresentation
 
 /// Composition root: the only place that assembles concrete dependencies.
 @MainActor enum AppContainer {
+    /// Single source of truth for the displayed version: Info.plist, written by
+    /// scripts/generate-project.py. Views receive it through WorkspaceViewState.
+    static var bundleVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    }
+
     static func makeViewModel(preview: Bool) -> WorkspaceViewModel {
         if preview {
-            return WorkspaceViewModel(repository: PreviewRepository(), homePath: "/preview", previewReport: PreviewFixtures.report)
+            return WorkspaceViewModel(repository: PreviewRepository(), homePath: "/preview", version: bundleVersion, previewReport: PreviewFixtures.report)
         }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let repository = LocalCleaningRepository(
@@ -16,7 +22,7 @@ import SafeCleanerPresentation
             settings: UserDefaultsSettingsStore(defaults: .standard),
             history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/SafeCleaner/history.json")),
             desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home)
-        return WorkspaceViewModel(repository: repository, homePath: home.path)
+        return WorkspaceViewModel(repository: repository, homePath: home.path, version: bundleVersion)
     }
 }
 

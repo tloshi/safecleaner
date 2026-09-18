@@ -118,7 +118,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Text("SafeCleaner 0.2.1 · Native SwiftUI · No network requests or telemetry\nAccess failures appear in scan results. Full Disk Access does not override all macOS protections.")
+                Text("SafeCleaner \(state.version) · Native SwiftUI · No network requests or telemetry\nAccess failures appear in scan results. Full Disk Access does not override all macOS protections.")
                     .font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(5)
             }.padding(32)
         }

@@ -10,14 +10,15 @@ import SafeCleanerCore
     @Published public private(set) var state = WorkspaceViewState()
     private let repository: any CleaningRepository
     private let homePath: String
+    private let version: String
     private let previewReport: ScanReport?
     private var session = WorkspaceSession()
     private var started = false
     private var activeTask: Task<Void, Never>?
     private var scanID: UUID?
 
-    public init(repository: any CleaningRepository, homePath: String, previewReport: ScanReport? = nil) {
-        self.repository = repository; self.homePath = homePath; self.previewReport = previewReport
+    public init(repository: any CleaningRepository, homePath: String, version: String, previewReport: ScanReport? = nil) {
+        self.repository = repository; self.homePath = homePath; self.version = version; self.previewReport = previewReport
         publish()
     }
 
@@ -161,6 +162,6 @@ import SafeCleanerCore
         do { try operation() } catch { session.message = error.localizedDescription }
     }
     private func publish() {
-        state = WorkspacePresenter.make(session, preview: previewReport != nil, homePath: homePath)
+        state = WorkspacePresenter.make(session, preview: previewReport != nil, homePath: homePath, version: version)
     }
 }

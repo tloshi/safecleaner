@@ -69,6 +69,7 @@ public struct HistoryRowState: Identifiable {
 }
 
 public struct WorkspaceViewState {
+    public internal(set) var version = ""
     public internal(set) var destination: Destination = .overview
     public internal(set) var isPreview = false
     public internal(set) var isBusy = true

@@ -6,8 +6,9 @@ import SafeCleanerCore
 /// Converts domain values to immutable display values. Views never aggregate,
 /// format file paths/dates, decide eligibility, or read operating-system state.
 enum WorkspacePresenter {
-    static func make(_ session: WorkspaceSession, preview: Bool, homePath: String) -> WorkspaceViewState {
+    static func make(_ session: WorkspaceSession, preview: Bool, homePath: String, version: String) -> WorkspaceViewState {
         var state = WorkspaceViewState()
+        state.version = version
         let busy = session.operation != .idle
         let selected = session.candidates.filter { $0.canTrash && session.selected.contains($0.id) }
         let found = session.candidates.reduce(Int64(0)) { $0 + $1.bytes }

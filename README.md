@@ -44,6 +44,77 @@ python3 scripts/check-boundaries.py
 
 The Swift package is also openable in Xcode. The `.xcodeproj` produces the native app bundle; the package exposes the independently testable core.
 
+## Releasing a new version
+
+Every release is built, notarized and stapled from a clean tree. The keychain profile created by
+`notarytool store-credentials` is permanent, so only the first release needs that step.
+
+1. **Bump the version.** It currently lives in two places and they drift silently:
+   - `scripts/generate-project.py` — `CFBundleShortVersionString` and `CFBundleVersion`,
+     then run `python3 scripts/generate-project.py` to rewrite `Info.plist`.
+   - `Sources/SafeCleaner/Views/WorkspaceScreens.swift` — the About line.
+
+   Do not hand-edit `Info.plist`; the generator owns it and will overwrite the change.
+
+2. **Verify.**
+
+   ```sh
+   swift test && python3 scripts/check-boundaries.py
+   ```
+
+3. **Record what was and was not tested** in `docs/VALIDATION.md`, per version. Keep the
+   "not performed" list honest; it is the part of that file worth reading.
+
+4. **Build, notarize and staple.**
+
+   ```sh
+   ./scripts/build-app.sh --notarize
+   ```
+
+   Expect two to fifteen minutes at the `--wait` step; that is Apple's queue, not a hang.
+   Success reports `status: Accepted` followed by `The staple and validate action worked!`.
+   The ticket is stapled to `build/SafeCleaner.dmg`, which is what people download, so the
+   image validates offline. The script's closing Gatekeeper line re-checks the `.app`, which
+   was signed before the submission and carries no ticket of its own — judge the run by the
+   stapler result, not that line.
+
+5. **Tag and ship.**
+
+   ```sh
+   git tag -a v0.3.0 -m "SafeCleaner 0.3.0"
+   ```
+
+### Version numbers
+
+`CFBundleShortVersionString` is the version people see. `CFBundleVersion` is a build counter that
+must strictly increase and must never be reused, because Apple rejects a repeated build number and
+update mechanisms compare it. Notarization is per build, not per app: every disk image handed to
+anyone needs its own submission.
+
+### What survives an update
+
+The signed app's designated requirement is anchored to the bundle identifier and the Team ID
+rather than to a per-build code hash:
+
+```text
+identifier "com.loshi.safecleaner" and anchor apple generic
+  and certificate leaf[subject.OU] = F3X3EF7L5N
+```
+
+So a rebuild keeps the same identity to macOS, and any Full Disk Access the user granted survives
+the update. Ad-hoc builds do not have this property: their requirement is a bare code hash, and a
+one-character version bump is enough to make macOS treat the app as a different program and drop
+the grant.
+
+### Known gap: there is no update channel
+
+The app does not check for, announce or install updates, and nothing here publishes an appcast.
+Anyone given a disk image stays on that build until they are handed another one by hand. For a tool
+whose worst failure is moving a file someone needed, that means a safety fix currently has no
+delivery path. Closing it means either a version check that reports a newer release, or Sparkle for
+real in-app updates — and either one adds an outbound network request, so the "no network requests
+or telemetry" claim in this README and in the app's own About text has to change with it.
+
 ## What works in 0.2
 
 - Real disk capacity and free-space display. No pre-populated fake scan results.

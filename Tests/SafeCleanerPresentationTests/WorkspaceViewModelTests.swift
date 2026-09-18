@@ -11,15 +11,23 @@ import SafeCleanerCore
     private func ready(_ items: [Candidate]) async -> (WorkspaceViewModel, FakeRepository) {
         let repository = FakeRepository()
         repository.report = ScanReport(candidates: items)
-        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture")
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
         await vm.start()
         await vm.send(.scan)?.value
         return (vm, repository)
     }
 
+    func testVersionReachesViewState() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        XCTAssertEqual(vm.state.version, "9.9.9")
+        await vm.start()
+        XCTAssertEqual(vm.state.version, "9.9.9")
+    }
+
     func testStartLoadsOnceWithoutScanning() async {
         let repository = FakeRepository()
-        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture")
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
         XCTAssertTrue(vm.state.isBusy)
         await vm.start(); await vm.start()
         XCTAssertEqual(repository.loads, 1)
@@ -83,7 +91,7 @@ import SafeCleanerCore
     func testScanFailureAndCancellationLeaveUIUsable() async {
         let repository = FakeRepository()
         repository.scanError = SafetyError.refused("Scan fixture error")
-        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture")
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
         await vm.start(); await vm.send(.scan)?.value
         XCTAssertTrue(vm.state.message?.contains("Scan fixture error") == true)
         XCTAssertTrue(vm.state.canScan)
@@ -144,7 +152,7 @@ import SafeCleanerCore
         let candidate = fixture()
         let repository = FakeRepository()
         repository.settings = .init(projectRoots: [URL(fileURLWithPath: "/fixture/project")], exclusions: [URL(fileURLWithPath: "/fixture/keep")])
-        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", previewReport: .init(candidates: [candidate]))
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9", previewReport: .init(candidates: [candidate]))
         await vm.start()
         let actions: [WorkspaceAction] = [.scan, .toggleCandidate(candidate.id), .openConfirmation, .acknowledge(true), .confirmCleanup,
             .excludeCandidate(candidate.id), .revealCandidate(candidate.id), .addProjectFolder,
