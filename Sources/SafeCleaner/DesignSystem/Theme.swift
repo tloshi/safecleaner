@@ -1,6 +1,6 @@
 import SwiftUI
 #if SWIFT_PACKAGE
-import ViggoCleanCore
+import SafeCleanerCore
 #endif
 
 enum Palette {

@@ -1,6 +1,6 @@
 import AppKit
 #if SWIFT_PACKAGE
-import ViggoCleanCore
+import SafeCleanerCore
 #endif
 
 @MainActor final class MacDesktopService: DesktopInteracting {

@@ -24,7 +24,7 @@ DerivedData/
 Packages/
 
 # ── Build output ────────────────────────────────────────────────────────
-# `build/` holds DerivedData and the produced ViggoClean.app (see AGENTS.md).
+# `build/` holds DerivedData and the produced SafeCleaner.app (see AGENTS.md).
 build/
 *.dSYM
 *.dSYM.zip

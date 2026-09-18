@@ -1,5 +1,5 @@
 import XCTest
-@testable import ViggoCleanCore
+@testable import SafeCleanerCore
 
 @MainActor final class RepositoryTests: XCTestCase {
     private func fixture(_ name: String = "cache", owner: String? = nil) -> Candidate {

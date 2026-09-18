@@ -5,7 +5,7 @@ import hashlib
 import plistlib
 
 root = Path(__file__).resolve().parent.parent
-project = root / "ViggoClean.xcodeproj"
+project = root / "SafeCleaner.xcodeproj"
 project.mkdir(exist_ok=True)
 
 def uid(value):
@@ -26,7 +26,7 @@ for file in files:
     path = str(file.relative_to(root))
     obj("ref:" + path, f"isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {q(path)}; sourceTree = SOURCE_ROOT;")
     obj("build:" + path, f"isa = PBXBuildFile; fileRef = {uid('ref:' + path)};")
-obj("product", "isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViggoClean.app; sourceTree = BUILT_PRODUCTS_DIR;")
+obj("product", "isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SafeCleaner.app; sourceTree = BUILT_PRODUCTS_DIR;")
 obj("sources", f"isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = {array(uid('build:' + str(f.relative_to(root))) for f in files)}; runOnlyForDeploymentPostprocessing = 0;")
 obj("frameworks", "isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;")
 obj("assets-ref", "isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT;")
@@ -56,7 +56,7 @@ for config in ["Debug", "Release"]:
         common.update(SWIFT_OPTIMIZATION_LEVEL="-Onone", DEBUG_INFORMATION_FORMAT="dwarf", SWIFT_ACTIVE_COMPILATION_CONDITIONS="DEBUG")
     else:
         common.update(SWIFT_OPTIMIZATION_LEVEL="-O", DEBUG_INFORMATION_FORMAT="dwarf-with-dsym")
-    app = {"PRODUCT_NAME": "ViggoClean", "PRODUCT_BUNDLE_IDENTIFIER": "com.loshi.viggoclean",
+    app = {"PRODUCT_NAME": "SafeCleaner", "PRODUCT_BUNDLE_IDENTIFIER": "com.loshi.safecleaner",
            "INFOPLIST_FILE": "Info.plist", "CODE_SIGN_IDENTITY": "-", "CODE_SIGN_STYLE": "Manual",
            "ENABLE_APP_SANDBOX": "NO", "ENABLE_HARDENED_RUNTIME": "YES",
            "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/../Frameworks",
@@ -66,14 +66,14 @@ for config in ["Debug", "Release"]:
         obj(prefix + config, f"isa = XCBuildConfiguration; buildSettings = {{ {settings} }}; name = {config};")
 for prefix in ["project", "app"]:
     obj(prefix + "configs", f"isa = XCConfigurationList; buildConfigurations = ({uid(prefix + 'Debug')}, {uid(prefix + 'Release')}); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;")
-obj("target", f"isa = PBXNativeTarget; buildConfigurationList = {uid('appconfigs')}; buildPhases = ({uid('sources')}, {uid('frameworks')}, {uid('resources')}); buildRules = (); dependencies = (); name = ViggoClean; productName = ViggoClean; productReference = {uid('product')}; productType = \"com.apple.product-type.application\";")
+obj("target", f"isa = PBXNativeTarget; buildConfigurationList = {uid('appconfigs')}; buildPhases = ({uid('sources')}, {uid('frameworks')}, {uid('resources')}); buildRules = (); dependencies = (); name = SafeCleaner; productName = SafeCleaner; productReference = {uid('product')}; productType = \"com.apple.product-type.application\";")
 obj("project", f"isa = PBXProject; attributes = {{ LastUpgradeCheck = 1600; }}; buildConfigurationList = {uid('projectconfigs')}; compatibilityVersion = \"Xcode 14.0\"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = {uid('group')}; productRefGroup = {uid('products')}; projectDirPath = \"\"; projectRoot = \"\"; targets = ({uid('target')});")
 (project / "project.pbxproj").write_text("// !$*UTF8*$!\n{\n\tarchiveVersion = 1;\n\tclasses = {};\n\tobjectVersion = 56;\n\tobjects = {\n" + "\n".join(objects) + f"\n\t}};\n\trootObject = {uid('project')};\n}}\n")
 
 schemes = project / "xcshareddata/xcschemes"
 schemes.mkdir(parents=True, exist_ok=True)
-reference = f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{uid("target")}" BuildableName="ViggoClean.app" BlueprintName="ViggoClean" ReferencedContainer="container:ViggoClean.xcodeproj"/>'
-(schemes / "ViggoClean.xcscheme").write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
+reference = f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{uid("target")}" BuildableName="SafeCleaner.app" BlueprintName="SafeCleaner" ReferencedContainer="container:SafeCleaner.xcodeproj"/>'
+(schemes / "SafeCleaner.xcscheme").write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
 <Scheme LastUpgradeVersion="1600" version="1.3">
  <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{reference}</BuildActionEntry></BuildActionEntries></BuildAction>
  <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable></LaunchAction>
@@ -83,9 +83,9 @@ reference = f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentif
 </Scheme>
 ''')
 
-info = dict(CFBundleName="ViggoClean", CFBundleDisplayName="ViggoClean",
-            CFBundleIdentifier="com.loshi.viggoclean", CFBundleExecutable="ViggoClean",
-            CFBundlePackageType="APPL", CFBundleShortVersionString="0.2.0", CFBundleVersion="2",
+info = dict(CFBundleName="SafeCleaner", CFBundleDisplayName="SafeCleaner",
+            CFBundleIdentifier="com.loshi.safecleaner", CFBundleExecutable="SafeCleaner",
+            CFBundlePackageType="APPL", CFBundleShortVersionString="0.2.1", CFBundleVersion="3",
             LSMinimumSystemVersion="14.0", NSHighResolutionCapable=True,
             NSPrincipalClass="NSApplication", CFBundleIconFile="AppIcon",
             CFBundleIconName="AppIcon",
@@ -93,4 +93,4 @@ info = dict(CFBundleName="ViggoClean", CFBundleDisplayName="ViggoClean",
             NSHumanReadableCopyright="Personal software by tloshi")
 with (root / "Info.plist").open("wb") as f:
     plistlib.dump(info, f)
-print("Generated ViggoClean.xcodeproj and Info.plist")
+print("Generated SafeCleaner.xcodeproj and Info.plist")

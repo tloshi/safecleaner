@@ -1,6 +1,6 @@
 import Foundation
 #if SWIFT_PACKAGE
-import ViggoCleanCore
+import SafeCleanerCore
 #endif
 
 /// Converts domain values to immutable display values. Views never aggregate,

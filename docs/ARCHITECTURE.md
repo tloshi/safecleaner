@@ -18,7 +18,7 @@ flowchart LR
 - **Presentation:** `WorkspaceViewModel` owns the operation state, selection, filters, confirmation and cancellation. It only receives a `CleaningRepository`; it imports Foundation/Combine, never SwiftUI or AppKit. `WorkspacePresenter` performs formatting, aggregation, path abbreviation and eligibility projection into `WorkspaceViewState`.
 - **App / Views:** passive render functions with a state value and an action closure. No repository, ViewModel, filesystem or singleton access. Local `@State` is limited to ephemeral appearance such as expanded rows and hover state.
 - **App / DesignSystem:** shared colors, cards, buttons, number transitions, storage ring and scan activity indicator. Animation belongs here and in views, never in business logic.
-- **App / Composition:** `AppContainer` is the composition root; `ViggoCleanApp` owns the ViewModel lifetime and injects snapshots and actions. Preview constructs an inert repository, not live services.
+- **App / Composition:** `AppContainer` is the composition root; `SafeCleanerApp` owns the ViewModel lifetime and injects snapshots and actions. Preview constructs an inert repository, not live services.
 
 SwiftPM compiles Core and Presentation as separate library modules and tests them independently. The generated native Xcode app target compiles the same source folders together for packaging. Its navigator mirrors the source hierarchy.
 

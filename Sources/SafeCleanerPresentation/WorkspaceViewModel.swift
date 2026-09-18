@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 #if SWIFT_PACKAGE
-import ViggoCleanCore
+import SafeCleanerCore
 #endif
 
 /// Unidirectional MVVM: views send intents; this object owns state transitions.

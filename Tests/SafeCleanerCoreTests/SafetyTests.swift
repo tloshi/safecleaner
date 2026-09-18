@@ -1,5 +1,5 @@
 import XCTest
-@testable import ViggoCleanCore
+@testable import SafeCleanerCore
 
 final class SafetyTests: XCTestCase {
     var home: URL!
@@ -7,7 +7,7 @@ final class SafetyTests: XCTestCase {
         // /tmp and /var are symlink aliases on macOS. Fixtures deliberately use
         // the real path because the production policy rejects symlink ancestors.
         home = URL(fileURLWithPath: "/private/tmp")
-            .appendingPathComponent("ViggoCleanTests-\(UUID().uuidString)")
+            .appendingPathComponent("SafeCleanerTests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
     }
     override func tearDownWithError() throws {

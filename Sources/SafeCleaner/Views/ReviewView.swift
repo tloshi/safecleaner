@@ -1,7 +1,7 @@
 import SwiftUI
 #if SWIFT_PACKAGE
-import ViggoCleanCore
-import ViggoCleanPresentation
+import SafeCleanerCore
+import SafeCleanerPresentation
 #endif
 
 struct ReviewView: View {

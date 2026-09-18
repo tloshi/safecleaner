@@ -1,6 +1,6 @@
 import Foundation
 #if SWIFT_PACKAGE
-import ViggoCleanCore
+import SafeCleanerCore
 #endif
 
 @MainActor final class UserDefaultsSettingsStore: SettingsStoring {

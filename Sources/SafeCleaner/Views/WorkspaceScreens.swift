@@ -1,6 +1,6 @@
 import SwiftUI
 #if SWIFT_PACKAGE
-import ViggoCleanPresentation
+import SafeCleanerPresentation
 #endif
 
 struct ProjectsView: View {
@@ -98,7 +98,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         Label("Cleanup policy", systemImage: "shield.lefthalf.filled").font(.headline)
                         policy("Review every item", "Nothing is selected automatically.")
-                        policy("Trash, never permanent delete", "ViggoClean does not empty your Trash.")
+                        policy("Trash, never permanent delete", "SafeCleaner does not empty your Trash.")
                         policy("Keep personal data", "No cleanup rules for documents, photos, passwords, conversations or model libraries.")
                         policy("Respect macOS", "No root helper. No changes to System Integrity Protection.")
                         policy("Considered motion", "Animations follow your macOS Reduce Motion preference.")
@@ -118,7 +118,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Text("ViggoClean 0.2 · Native SwiftUI · No network requests or telemetry\nAccess failures appear in scan results. Full Disk Access does not override all macOS protections.")
+                Text("SafeCleaner 0.2.1 · Native SwiftUI · No network requests or telemetry\nAccess failures appear in scan results. Full Disk Access does not override all macOS protections.")
                     .font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(5)
             }.padding(32)
         }

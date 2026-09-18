@@ -1,6 +1,6 @@
 import SwiftUI
 #if SWIFT_PACKAGE
-import ViggoCleanPresentation
+import SafeCleanerPresentation
 #endif
 
 struct OverviewView: View {

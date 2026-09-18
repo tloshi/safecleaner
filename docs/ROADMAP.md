@@ -1,4 +1,4 @@
-# ViggoClean — roadmap i produktit dhe zhvillimit
+# SafeCleaner — roadmap i produktit dhe zhvillimit
 
 **Versioni i planit:** 18 shtator 2026  
 **Përdorimi fillestar:** personal, macOS 14+, pa abonim dhe pa backend  

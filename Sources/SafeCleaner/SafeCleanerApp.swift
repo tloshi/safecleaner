@@ -1,13 +1,13 @@
 import SwiftUI
 import AppKit
 #if SWIFT_PACKAGE
-import ViggoCleanPresentation
+import SafeCleanerPresentation
 #endif
 
-@main struct ViggoCleanApp: App {
+@main struct SafeCleanerApp: App {
     @StateObject private var model = AppContainer.makeViewModel(preview: ProcessInfo.processInfo.arguments.contains("--preview-data"))
     var body: some Scene {
-        Window("ViggoClean", id: "main") {
+        Window("SafeCleaner", id: "main") {
             ContentView(state: model.state, send: { model.send($0) })
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1000, minHeight: 700)

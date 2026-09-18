@@ -3,23 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>ViggoClean</string>
+	<string>SafeCleaner</string>
 	<key>CFBundleExecutable</key>
-	<string>ViggoClean</string>
+	<string>SafeCleaner</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.loshi.viggoclean</string>
+	<string>com.loshi.safecleaner</string>
 	<key>CFBundleName</key>
-	<string>ViggoClean</string>
+	<string>SafeCleaner</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.2.1</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>

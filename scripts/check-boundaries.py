@@ -6,10 +6,10 @@ import sys
 
 root = Path(__file__).resolve().parent.parent
 rules = [
-    ("Sources/ViggoClean/Views", r"\b(FileManager|NSWorkspace|NSOpenPanel|UserDefaults|ProcessInfo|NSHomeDirectory|WorkspaceViewModel|CleaningRepository|byteLabel)\b"),
-    ("Sources/ViggoClean/DesignSystem", r"\b(FileManager|NSWorkspace|NSOpenPanel|UserDefaults|WorkspaceViewModel|CleaningRepository)\b"),
-    ("Sources/ViggoCleanPresentation", r"\b(import\s+(SwiftUI|AppKit)|FileManager|NSWorkspace|NSOpenPanel|UserDefaults|ProcessInfo)\b"),
-    ("Sources/ViggoCleanCore", r"\bimport\s+(SwiftUI|AppKit|Combine)\b"),
+    ("Sources/SafeCleaner/Views", r"\b(FileManager|NSWorkspace|NSOpenPanel|UserDefaults|ProcessInfo|NSHomeDirectory|WorkspaceViewModel|CleaningRepository|byteLabel)\b"),
+    ("Sources/SafeCleaner/DesignSystem", r"\b(FileManager|NSWorkspace|NSOpenPanel|UserDefaults|WorkspaceViewModel|CleaningRepository)\b"),
+    ("Sources/SafeCleanerPresentation", r"\b(import\s+(SwiftUI|AppKit)|FileManager|NSWorkspace|NSOpenPanel|UserDefaults|ProcessInfo)\b"),
+    ("Sources/SafeCleanerCore", r"\bimport\s+(SwiftUI|AppKit|Combine)\b"),
 ]
 failures = []
 for directory, pattern in rules:

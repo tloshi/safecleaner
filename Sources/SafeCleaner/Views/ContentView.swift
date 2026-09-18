@@ -1,6 +1,6 @@
 import SwiftUI
 #if SWIFT_PACKAGE
-import ViggoCleanPresentation
+import SafeCleanerPresentation
 #endif
 
 /// Passive shell. Receives a snapshot and emits intents; no services or ViewModel.

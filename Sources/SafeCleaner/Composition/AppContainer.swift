@@ -1,7 +1,7 @@
 import Foundation
 #if SWIFT_PACKAGE
-import ViggoCleanCore
-import ViggoCleanPresentation
+import SafeCleanerCore
+import SafeCleanerPresentation
 #endif
 
 /// Composition root: the only place that assembles concrete dependencies.
@@ -14,7 +14,7 @@ import ViggoCleanPresentation
         let repository = LocalCleaningRepository(
             scanner: LocalScanService(), cleaner: LocalCleanupService(), disk: LocalDiskInfoService(home: home),
             settings: UserDefaultsSettingsStore(defaults: .standard),
-            history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/ViggoClean/history.json")),
+            history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/SafeCleaner/history.json")),
             desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home)
         return WorkspaceViewModel(repository: repository, homePath: home.path)
     }

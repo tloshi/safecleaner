@@ -1,4 +1,4 @@
-# ViggoClean
+# SafeCleaner
 
 A personal, native macOS cleaner. Understand disk usage, review every candidate, and move selected caches to Trash.
 
@@ -6,13 +6,13 @@ A personal, native macOS cleaner. Understand disk usage, review every candidate,
 
 ## Start
 
-Open `ViggoClean.xcodeproj` in Xcode, select **ViggoClean → My Mac**, then Run (⌘R). The Xcode project uses ad-hoc local signing; no paid developer account is required for this local development build.
+Open `SafeCleaner.xcodeproj` in Xcode, select **SafeCleaner → My Mac**, then Run (⌘R). The Xcode project uses ad-hoc local signing; no paid developer account is required for this local development build.
 
 Or build a standalone application:
 
 ```sh
 ./scripts/build-app.sh          # universal (arm64 + x86_64), signed
-open build/ViggoClean.app
+open build/SafeCleaner.app
 ```
 
 `build-app.sh` signs with the first `Developer ID Application` identity in your keychain. With
@@ -25,14 +25,14 @@ with an existing membership.
 To produce a distributable disk image:
 
 ```sh
-xcrun notarytool store-credentials viggoclean-notary \
+xcrun notarytool store-credentials safecleaner-notary \
     --apple-id <apple-id> --team-id <TEAMID> --password <app-specific-password>   # once
 ./scripts/build-app.sh --notarize
 ```
 
-That builds, signs, packages `build/ViggoClean.dmg`, submits it to Apple, waits for the result
-and staples the ticket to the image. Override the identity with `VIGGO_SIGN_ID`, the keychain
-profile with `VIGGO_NOTARY_PROFILE`, and the architectures with `VIGGO_ARCHS`.
+That builds, signs, packages `build/SafeCleaner.dmg`, submits it to Apple, waits for the result
+and staples the ticket to the image. Override the identity with `SAFECLEANER_SIGN_ID`, the keychain
+profile with `SAFECLEANER_NOTARY_PROFILE`, and the architectures with `SAFECLEANER_ARCHS`.
 
 Build and run core tests:
 
@@ -84,8 +84,8 @@ Allocated bytes are an estimate. APFS sharing, snapshots, compression and Trash 
 
 ## Privacy and storage
 
-- Settings: app-scoped UserDefaults (`com.loshi.viggoclean` in the app bundle).
-- Activity: `~/Library/Application Support/ViggoClean/history.json`.
+- Settings: app-scoped UserDefaults (`com.loshi.safecleaner` in the app bundle).
+- Activity: `~/Library/Application Support/SafeCleaner/history.json`.
 - No analytics, telemetry, remote classification or automatic file uploads.
 - No automatic scan, automatic cleanup or launch agent.
 - macOS permissions and SIP are respected. Missing access is visible in results; Full Disk Access is not automatically granted or required blindly.
@@ -95,7 +95,7 @@ Allocated bytes are an estimate. APFS sharing, snapshots, compression and Trash 
 For visual development only:
 
 ```sh
-open build/ViggoClean.app --args --preview-data
+open build/SafeCleaner.app --args --preview-data
 ```
 
 Close any running instance first. The preview is explicitly labelled, uses synthetic candidate data and disables scanning/cleaning. Normal launch always uses real data.
@@ -103,11 +103,11 @@ Close any running instance first. The preview is explicitly labelled, uses synth
 ## Project layout
 
 ```text
-Sources/ViggoClean/                 Passive Views, DesignSystem, Services and Composition
-Sources/ViggoCleanCore/             Domain, service contracts, repository and file safety
-Sources/ViggoCleanPresentation/     ViewModel, immutable ViewState and pure Presenter
-Tests/ViggoCleanCoreTests/          Filesystem safety and repository tests
-Tests/ViggoCleanPresentationTests/  ViewModel tests with a fake repository
+Sources/SafeCleaner/                 Passive Views, DesignSystem, Services and Composition
+Sources/SafeCleanerCore/             Domain, service contracts, repository and file safety
+Sources/SafeCleanerPresentation/     ViewModel, immutable ViewState and pure Presenter
+Tests/SafeCleanerCoreTests/          Filesystem safety and repository tests
+Tests/SafeCleanerPresentationTests/  ViewModel tests with a fake repository
 docs/ROADMAP.md              Product, UI and engineering roadmap (Shqip)
 docs/ARCHITECTURE.md         Invariants, limitations and extension guidance
 scripts/build-app.sh        Build and ad-hoc sign the local .app

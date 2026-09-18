@@ -1,6 +1,6 @@
 import XCTest
-import ViggoCleanCore
-@testable import ViggoCleanPresentation
+import SafeCleanerCore
+@testable import SafeCleanerPresentation
 
 @MainActor final class WorkspaceViewModelTests: XCTestCase {
     private func fixture(_ name: String = "cache", cleanable: Bool = true, bytes: Int64 = 4096) -> Candidate {
