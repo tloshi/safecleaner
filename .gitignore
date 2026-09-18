@@ -1,6 +1,55 @@
-.build/
-build/
+# ── macOS ───────────────────────────────────────────────────────────────
 .DS_Store
-*.xcuserstate
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# ── Xcode ───────────────────────────────────────────────────────────────
 xcuserdata/
+*.xcuserdatad
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.xcresult/
+DerivedData/
+
+# ── Swift Package Manager ───────────────────────────────────────────────
+# Package.resolved is intentionally NOT ignored: this ships as an app.
+.build/
 .swiftpm/
+Packages/
+
+# ── Build output ────────────────────────────────────────────────────────
+# `build/` holds DerivedData and the produced ViggoClean.app (see AGENTS.md).
+build/
+*.dSYM
+*.dSYM.zip
+*.log
+
+# ── Signing, provisioning & secrets ─────────────────────────────────────
+*.p12
+*.pem
+*.key
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+.env
+.env.*
+!.env.example
+
+# ── Editors & IDEs ──────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*~
+
+# ── Local agent tooling (machine-specific state) ────────────────────────
+# .tokensave/ holds an absolute root_dir plus branch-local SQLite databases.
+.tokensave/
+.claude/settings.local.json
+.claude/.headroom_wrap_marker.json
