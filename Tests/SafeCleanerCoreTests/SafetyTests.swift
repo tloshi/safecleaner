@@ -34,12 +34,55 @@ final class SafetyTests: XCTestCase {
         XCTAssertFalse(FileSafety.isInside(URL(fileURLWithPath: "/Users/test/cache-other/data"), root: root))
         XCTAssertFalse(FileSafety.isInside(root.appendingPathComponent("../secret"), root: root))
     }
-    func testRejectsSymbolicLinkInsideTree() throws {
+    /// POLICY CHANGE: an interior symbolic link no longer refuses the whole candidate.
+    ///
+    /// The refusal guarded a threat a rename-based move does not have. `trashItem` renames
+    /// the subtree and never dereferences a link inside it, so the link's target was never
+    /// at risk — the old test asserted the target survived a snapshot that had already
+    /// refused, which proved nothing about the move. This asserts the property that
+    /// actually matters: the target survives an executed cleanup. The ancestor check in
+    /// `validate` is the load-bearing one and is unchanged (see the next test).
+    ///
+    /// On the author's machine this refusal alone blocked 12,13 GB of build output.
+    func testInteriorSymbolicLinkIsCountedAndItsTargetSurvivesCleanup() throws {
         let secret = try file("personal/secret.txt")
         try file("cache/normal")
         try FileManager.default.createSymbolicLink(at: home.appendingPathComponent("cache/link"), withDestinationURL: secret)
-        XCTAssertThrowsError(try FileSafety.snapshot(home.appendingPathComponent("cache"), root: home))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: secret.path))
+
+        let item = try candidate("cache")
+        XCTAssertGreaterThan(item.stamp.logicalBytes, 0)
+
+        let target = home.appendingPathComponent("test-trash")
+        let result = CleanupEngine(trash: { source in
+            try FileManager.default.moveItem(at: source, to: target)
+            return target
+        }).perform(item)
+
+        XCTAssertNil(result.error)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: secret.path),
+                      "the link moved; its target must not")
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(
+            atPath: target.appendingPathComponent("link").path), secret.path,
+                       "the link itself should move intact, not be resolved")
+    }
+    /// The link is an entry in its own right and must never be walked through, or the
+    /// estimate would count a tree that is not going to move.
+    func testInteriorSymbolicLinkIsNotFollowedWhenMeasuring() throws {
+        try file("payload/big.bin", data: String(repeating: "x", count: 50_000))
+        try file("cache/small")
+        try FileManager.default.createSymbolicLink(at: home.appendingPathComponent("cache/link"),
+                                                   withDestinationURL: home.appendingPathComponent("payload"))
+        let stamp = try FileSafety.snapshot(home.appendingPathComponent("cache"), root: home)
+        XCTAssertLessThan(stamp.logicalBytes, 50_000, "the link's target must not be counted")
+    }
+    /// A package inside a candidate is an ordinary directory as far as a rename goes.
+    /// Descending into it keeps the estimate equal to what actually moves. On the
+    /// author's machine this refusal blocked a further 10,44 GB of build output.
+    func testInteriorPackageIsMeasuredRatherThanRefused() throws {
+        try file("cache/normal")
+        try file("cache/Some.app/Contents/payload.bin", data: String(repeating: "y", count: 20_000))
+        let stamp = try FileSafety.snapshot(home.appendingPathComponent("cache"), root: home)
+        XCTAssertGreaterThan(stamp.logicalBytes, 20_000, "package contents must be counted, not skipped")
     }
     func testRejectsSymbolicLinkAncestor() throws {
         try file("real/cache/data")
@@ -64,13 +107,6 @@ final class SafetyTests: XCTestCase {
         let stamp = try FileSafety.snapshot(root, root: home)
         XCTAssertGreaterThan(stamp.logicalBytes, 0)
         XCTAssertEqual(stamp.fileCount, 1)
-    }
-    // The exemption is for the root only. A package found inside a candidate is still
-    // refused: the user reviewed the root, not its interior.
-    func testNestedPackageIsStillRefused() throws {
-        try file("cache/normal")
-        try file("cache/Some.app/Contents/data")
-        XCTAssertThrowsError(try FileSafety.snapshot(home.appendingPathComponent("cache"), root: home))
     }
     func testChangedFilesNeverReachTrashOperation() throws {
         let url = try file("cache/data")

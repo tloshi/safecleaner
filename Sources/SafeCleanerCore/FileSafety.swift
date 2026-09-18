@@ -38,29 +38,47 @@ public enum FileSafety {
         var count = 0
         var visited = Set<String>()
 
-        func record(_ entry: URL, isRoot: Bool) throws {
+        /// Returns the entry's type so `walk` knows whether to descend. Never follows a
+        /// symbolic link.
+        ///
+        /// The unit that moves is the whole subtree, because `trashItem` renames it. So the
+        /// unit that is measured has to be the whole subtree too, or the estimate and the
+        /// move describe different things. That is why interior symlinks and packages are
+        /// *counted* here rather than skipped or refused:
+        ///
+        /// - A symbolic link is an entry in its own right. It moves; its target does not,
+        ///   because a rename never dereferences it. Counting the link and refusing to walk
+        ///   through it is both accurate and safe. Refusing the candidate outright guarded
+        ///   nothing — see `testInteriorSymbolicLinkIsCountedAndItsTargetSurvivesCleanup`.
+        /// - A package is an ordinary directory to a rename. Descending into it keeps the
+        ///   estimate equal to what moves.
+        ///
+        /// What still refuses is what genuinely does not survive the move as described:
+        /// another volume (a rename cannot cross one) and a special file. The ancestor
+        /// symlink check in `validate` is the load-bearing guard and is unchanged.
+        @discardableResult
+        func record(_ entry: URL) throws -> FileAttributeType? {
             try Task.checkCancellation()
             let attrs = try fm.attributesOfItem(atPath: entry.path)
             let type = attrs[.type] as? FileAttributeType
+            let inode = (attrs[.systemFileNumber] as? NSNumber)?.stringValue ?? "unknown"
+            let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+            let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+
+            if type == .typeSymbolicLink {
+                let line = "\(entry.path)\u{0}\(inode)\u{0}\(size)\u{0}\(modified)\u{0}link\n"
+                digest.update(data: Data(line.utf8))
+                logical += size
+                allocated += size
+                count += 1
+                return type
+            }
             guard type == .typeDirectory || type == .typeRegular else {
-                throw SafetyError.refused("Contains a link or special file; manual review is required.")
+                throw SafetyError.refused("Contains a special file; manual review is required.")
             }
             guard attrs[.systemNumber] as? NSNumber == device else {
                 throw SafetyError.refused("Cross-volume folders are excluded.")
             }
-            let values = try entry.resourceValues(forKeys: [.fileAllocatedSizeKey, .isPackageKey])
-            // A package *inside* a candidate is still refused: the user reviewed the root,
-            // not its interior. The root itself is exempt, because it is the unit the rule
-            // nominated, the unit the user confirms, and the unit trashItem moves whole —
-            // so measuring it cannot diverge from what is moved. Without this exemption a
-            // candidate whose own name carries a package extension is dead by construction,
-            // which is what silently disabled the ~/Library/Caches/org.swift.swiftpm rule.
-            if values.isPackage == true && !isRoot {
-                throw SafetyError.refused("Contains a package; this version leaves it untouched.")
-            }
-            let inode = (attrs[.systemFileNumber] as? NSNumber)?.stringValue ?? "unknown"
-            let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
-            let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             let links = (attrs[.referenceCount] as? NSNumber)?.intValue ?? 1
             if type == .typeRegular && links > 1 {
                 throw SafetyError.refused("Hard-linked files need manual review.")
@@ -68,26 +86,27 @@ public enum FileSafety {
             let line = "\(entry.path)\u{0}\(inode)\u{0}\(size)\u{0}\(modified)\u{0}\(type?.rawValue ?? "")\n"
             digest.update(data: Data(line.utf8))
             if type == .typeRegular && visited.insert(inode).inserted {
+                let values = try entry.resourceValues(forKeys: [.fileAllocatedSizeKey])
                 logical += size
                 allocated += Int64(values.fileAllocatedSize ?? Int(size))
                 count += 1
             }
+            return type
         }
 
         // Explicit traversal makes ordering stable and errors observable. No symlinks,
         // unreadable subtrees, or packages can silently disappear from an estimate.
-        func walk(_ entry: URL, isRoot: Bool = false) throws {
-            try record(entry, isRoot: isRoot)
-            let attrs = try fm.attributesOfItem(atPath: entry.path)
-            if attrs[.type] as? FileAttributeType == .typeDirectory {
-                let children = try fm.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil)
-                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
-                // The per-child pool keeps peak memory flat on large trees. Without it the
-                // autoreleased attribute dictionaries accumulate for the whole traversal.
-                for child in children { try autoreleasepool { try walk(child) } }
-            }
+        func walk(_ entry: URL) throws {
+            // record reports the type it already stat'ed, so the directory check costs
+            // nothing extra, and a symbolic link is never descended into.
+            guard try record(entry) == .typeDirectory else { return }
+            let children = try fm.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil)
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            // The per-child pool keeps peak memory flat on large trees. Without it the
+            // autoreleased attribute dictionaries accumulate for the whole traversal.
+            for child in children { try autoreleasepool { try walk(child) } }
         }
-        try walk(url, isRoot: true)
+        try walk(url)
         return TreeStamp(digest: digest.finalize().map { String(format: "%02x", $0) }.joined(),
                          logicalBytes: logical, allocatedBytes: allocated, fileCount: count)
     }
