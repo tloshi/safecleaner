@@ -6,14 +6,33 @@ A personal, native macOS cleaner. Understand disk usage, review every candidate,
 
 ## Start
 
-Open `ViggoClean.xcodeproj` in Xcode, select **ViggoClean → My Mac**, then Run (⌘R). The project uses ad-hoc local signing; no paid developer account is required for this local development build.
+Open `ViggoClean.xcodeproj` in Xcode, select **ViggoClean → My Mac**, then Run (⌘R). The Xcode project uses ad-hoc local signing; no paid developer account is required for this local development build.
 
 Or build a standalone application:
 
 ```sh
-./scripts/build-app.sh
+./scripts/build-app.sh          # universal (arm64 + x86_64), signed
 open build/ViggoClean.app
 ```
+
+`build-app.sh` signs with the first `Developer ID Application` identity in your keychain. With
+none present it falls back to ad-hoc signing and says so: an ad-hoc build is rejected by
+Gatekeeper on any other Mac, and its identity changes on every rebuild, which silently drops
+any Full Disk Access grant. Create the certificate at
+[developer.apple.com](https://developer.apple.com/account/resources/certificates) — it is free
+with an existing membership.
+
+To produce a distributable disk image:
+
+```sh
+xcrun notarytool store-credentials viggoclean-notary \
+    --apple-id <apple-id> --team-id <TEAMID> --password <app-specific-password>   # once
+./scripts/build-app.sh --notarize
+```
+
+That builds, signs, packages `build/ViggoClean.dmg`, submits it to Apple, waits for the result
+and staples the ticket to the image. Override the identity with `VIGGO_SIGN_ID`, the keychain
+profile with `VIGGO_NOTARY_PROFILE`, and the architectures with `VIGGO_ARCHS`.
 
 Build and run core tests:
 

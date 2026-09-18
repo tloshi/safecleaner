@@ -1,5 +1,28 @@
 # Validation
 
+## 0.2.1 — distribution packaging, 18 September 2026
+
+- Universal build: `swift build -c release --arch arm64 --arch x86_64` passed. `lipo -archs` reports
+  `x86_64 arm64`; `vtool -show-build` reports `minos 14.0` for **both** slices, matching
+  `LSMinimumSystemVersion`. The previous release binary was arm64-only and could not launch on Intel.
+- Asset catalog is now compiled with `actool` into `Contents/Resources/Assets.car`, and `Info.plist`
+  carries `CFBundleIconName`. The bundle previously shipped a loose `.icns` only, which App Store
+  Connect rejects.
+- `PrivacyInfo.xcprivacy` added and bundled, declaring three required-reason APIs actually used:
+  file timestamps `C617.1` (`FileSafety.swift`), disk space `85F4.1` (`FileSystemServices.swift`),
+  user defaults `CA92.1` (`PersistenceServices.swift`). No tracking, no collected data types.
+- `scripts/build-app.sh` now signs with a `Developer ID Application` identity when one exists,
+  with `--timestamp`, and falls back to ad-hoc with an explicit warning. `--notarize` builds a DMG,
+  submits it via `notarytool --wait` and staples the ticket.
+- `codesign --verify --deep --strict`: passed. `LSApplicationCategoryType` set to
+  `public.app-category.developer-tools`.
+- **Still ad-hoc on this machine:** `security find-identity -v -p codesigning` returns no
+  `Developer ID Application` certificate, so `spctl --assess --type exec` still reports `rejected`.
+  The paid membership exists (`Apple Distribution: Taulant Loshi (F3X3EF7L5N)`); the Developer ID
+  certificate has not been created yet. Notarization is therefore untested end to end.
+- Regression after regenerating the Xcode project: 32 XCTest tests passed, boundary checker passed,
+  `xcodebuild` Debug build succeeded.
+
 ## 0.2 — architecture and motion, 18 September 2026
 
 - Swift package debug build: passed.

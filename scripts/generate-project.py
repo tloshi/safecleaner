@@ -31,7 +31,9 @@ obj("sources", f"isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files
 obj("frameworks", "isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;")
 obj("assets-ref", "isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT;")
 obj("assets-build", f"isa = PBXBuildFile; fileRef = {uid('assets-ref')};")
-obj("resources", f"isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({uid('assets-build')}); runOnlyForDeploymentPostprocessing = 0;")
+obj("privacy-ref", "isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = SOURCE_ROOT;")
+obj("privacy-build", f"isa = PBXBuildFile; fileRef = {uid('privacy-ref')};")
+obj("resources", f"isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({uid('assets-build')}, {uid('privacy-build')}); runOnlyForDeploymentPostprocessing = 0;")
 obj("products", f"isa = PBXGroup; children = ({uid('product')}); name = Products; sourceTree = \"<group>\";")
 def source_group(directory):
     entries = []
@@ -44,7 +46,7 @@ def source_group(directory):
     obj(name, f"isa = PBXGroup; children = {array(entries)}; name = {q(directory.name)}; sourceTree = \"<group>\";")
     return uid(name)
 
-children = [source_group(root / "Sources"), uid("assets-ref"), uid("products")]
+children = [source_group(root / "Sources"), uid("assets-ref"), uid("privacy-ref"), uid("products")]
 obj("group", f"isa = PBXGroup; children = {array(children)}; sourceTree = \"<group>\";")
 
 for config in ["Debug", "Release"]:
@@ -86,6 +88,8 @@ info = dict(CFBundleName="ViggoClean", CFBundleDisplayName="ViggoClean",
             CFBundlePackageType="APPL", CFBundleShortVersionString="0.2.0", CFBundleVersion="2",
             LSMinimumSystemVersion="14.0", NSHighResolutionCapable=True,
             NSPrincipalClass="NSApplication", CFBundleIconFile="AppIcon",
+            CFBundleIconName="AppIcon",
+            LSApplicationCategoryType="public.app-category.developer-tools",
             NSHumanReadableCopyright="Personal software by tloshi")
 with (root / "Info.plist").open("wb") as f:
     plistlib.dump(info, f)
