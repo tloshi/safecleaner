@@ -9,8 +9,10 @@ Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
   reading a child — the Swift package cache rule was dead on every Mac. The guard now exempts the
   root only. Measured on the author's machine with `probe-guards.swift`: that rule went
   `REFUSED (package)` → `ACCEPTED [973,8 MB, 689 files]`, and the seven developer rules together
-  went **674,3 MB → 1,65 GB**. Two new tests cover the root exemption and that a *nested* package is
-  still refused; the guard had no test at all before.
+  went **674,3 MB → 1,65 GB**. The guard had no test at all before.
+  **Superseded later the same day** by the A4 change below, which stopped packages refusing
+  anywhere, making the root exemption redundant; its plumbing and its nested-package test were
+  removed. The measurement above still stands as the intermediate step.
 - **Activity history is now a versioned envelope.** Cleanup is gated on the history being readable,
   so a record-shape change in 0.3 would have paused cleanup for every 0.2 install with no recovery.
   Decoding falls back to the bare array 0.2 wrote, so existing files migrate on next save. A file
@@ -23,9 +25,6 @@ Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
 - **Per-child `autoreleasepool` in `FileSafety.walk`.** Applied as the audit recommended. Correctness
   is covered by the existing suite; the peak-memory improvement is the audit's measurement, **not
   independently re-measured here.**
-- Regression: **44 XCTest tests passed** (17 filesystem safety, 9 repository, 5 history format,
-  13 ViewModel), boundary checker passed, `xcodebuild` Debug build succeeded.
-
 - **Measure the whole subtree instead of refusing it (audit A4).** Interior symlinks and packages
   are counted rather than refused. `trashItem` renames the subtree, so the unit that moves is the
   whole tree and the unit measured now matches it. The audit proposed *skipping* those entries and
@@ -62,7 +61,7 @@ Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
   by driving the real UI.
 - The 30-day idle threshold is displayed, not enforced: nothing filters or sorts by it yet, so the
   user still reads the age per row.
-- No real cleanup was performed. Tests use synthetic files and in-memory fakes throughout.
+- Tests use synthetic files and in-memory fakes throughout.
 
 ## 0.2.1 — distribution packaging, 18 September 2026
 
