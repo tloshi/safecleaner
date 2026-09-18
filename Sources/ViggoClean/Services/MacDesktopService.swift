@@ -1,0 +1,20 @@
+import AppKit
+#if SWIFT_PACKAGE
+import ViggoCleanCore
+#endif
+
+@MainActor final class MacDesktopService: DesktopInteracting {
+    func chooseProjectFolders() async -> [URL] {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true; panel.prompt = "Add folder"
+        panel.message = "Choose local project folders inside your home directory. Cloud folders are excluded."
+        return await withCheckedContinuation { continuation in
+            panel.begin { response in continuation.resume(returning: response == .OK ? panel.urls : []) }
+        }
+    }
+    func runningApplicationIDs() -> Set<String> {
+        Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+    }
+    func reveal(_ url: URL) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+}

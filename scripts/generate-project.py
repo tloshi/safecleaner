@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Generate a dependency-free, local macOS Xcode app project."""
+from pathlib import Path
+import hashlib
+import plistlib
+
+root = Path(__file__).resolve().parent.parent
+project = root / "ViggoClean.xcodeproj"
+project.mkdir(exist_ok=True)
+
+def uid(value):
+    return hashlib.sha1(value.encode()).hexdigest()[:24].upper()
+
+def q(value):
+    return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+files = sorted(root.glob("Sources/**/*.swift"))
+objects = []
+def obj(name, body):
+    objects.append(f"\t\t{uid(name)} = {{ {body} }};")
+
+def array(items):
+    return "(" + ", ".join(items) + ")"
+
+for file in files:
+    path = str(file.relative_to(root))
+    obj("ref:" + path, f"isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {q(path)}; sourceTree = SOURCE_ROOT;")
+    obj("build:" + path, f"isa = PBXBuildFile; fileRef = {uid('ref:' + path)};")
+obj("product", "isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViggoClean.app; sourceTree = BUILT_PRODUCTS_DIR;")
+obj("sources", f"isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = {array(uid('build:' + str(f.relative_to(root))) for f in files)}; runOnlyForDeploymentPostprocessing = 0;")
+obj("frameworks", "isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;")
+obj("assets-ref", "isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = SOURCE_ROOT;")
+obj("assets-build", f"isa = PBXBuildFile; fileRef = {uid('assets-ref')};")
+obj("resources", f"isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = ({uid('assets-build')}); runOnlyForDeploymentPostprocessing = 0;")
+obj("products", f"isa = PBXGroup; children = ({uid('product')}); name = Products; sourceTree = \"<group>\";")
+def source_group(directory):
+    entries = []
+    for child in sorted(directory.iterdir()):
+        if child.is_dir():
+            entries.append(source_group(child))
+        elif child.suffix == ".swift":
+            entries.append(uid("ref:" + str(child.relative_to(root))))
+    name = "folder:" + str(directory.relative_to(root))
+    obj(name, f"isa = PBXGroup; children = {array(entries)}; name = {q(directory.name)}; sourceTree = \"<group>\";")
+    return uid(name)
+
+children = [source_group(root / "Sources"), uid("assets-ref"), uid("products")]
+obj("group", f"isa = PBXGroup; children = {array(children)}; sourceTree = \"<group>\";")
+
+for config in ["Debug", "Release"]:
+    common = {"SDKROOT": "macosx", "MACOSX_DEPLOYMENT_TARGET": "14.0", "SWIFT_VERSION": "5.0",
+              "CLANG_ENABLE_MODULES": "YES", "GCC_C_LANGUAGE_STANDARD": "gnu17"}
+    if config == "Debug":
+        common.update(SWIFT_OPTIMIZATION_LEVEL="-Onone", DEBUG_INFORMATION_FORMAT="dwarf", SWIFT_ACTIVE_COMPILATION_CONDITIONS="DEBUG")
+    else:
+        common.update(SWIFT_OPTIMIZATION_LEVEL="-O", DEBUG_INFORMATION_FORMAT="dwarf-with-dsym")
+    app = {"PRODUCT_NAME": "ViggoClean", "PRODUCT_BUNDLE_IDENTIFIER": "com.loshi.viggoclean",
+           "INFOPLIST_FILE": "Info.plist", "CODE_SIGN_IDENTITY": "-", "CODE_SIGN_STYLE": "Manual",
+           "ENABLE_APP_SANDBOX": "NO", "ENABLE_HARDENED_RUNTIME": "YES",
+           "LD_RUNPATH_SEARCH_PATHS": "$(inherited) @executable_path/../Frameworks",
+           "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon", "COMBINE_HIDPI_IMAGES": "YES"}
+    for prefix, values in [("project", common), ("app", app)]:
+        settings = " ".join(f"{key} = {q(value)};" for key, value in values.items())
+        obj(prefix + config, f"isa = XCBuildConfiguration; buildSettings = {{ {settings} }}; name = {config};")
+for prefix in ["project", "app"]:
+    obj(prefix + "configs", f"isa = XCConfigurationList; buildConfigurations = ({uid(prefix + 'Debug')}, {uid(prefix + 'Release')}); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;")
+obj("target", f"isa = PBXNativeTarget; buildConfigurationList = {uid('appconfigs')}; buildPhases = ({uid('sources')}, {uid('frameworks')}, {uid('resources')}); buildRules = (); dependencies = (); name = ViggoClean; productName = ViggoClean; productReference = {uid('product')}; productType = \"com.apple.product-type.application\";")
+obj("project", f"isa = PBXProject; attributes = {{ LastUpgradeCheck = 1600; }}; buildConfigurationList = {uid('projectconfigs')}; compatibilityVersion = \"Xcode 14.0\"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = {uid('group')}; productRefGroup = {uid('products')}; projectDirPath = \"\"; projectRoot = \"\"; targets = ({uid('target')});")
+(project / "project.pbxproj").write_text("// !$*UTF8*$!\n{\n\tarchiveVersion = 1;\n\tclasses = {};\n\tobjectVersion = 56;\n\tobjects = {\n" + "\n".join(objects) + f"\n\t}};\n\trootObject = {uid('project')};\n}}\n")
+
+schemes = project / "xcshareddata/xcschemes"
+schemes.mkdir(parents=True, exist_ok=True)
+reference = f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{uid("target")}" BuildableName="ViggoClean.app" BlueprintName="ViggoClean" ReferencedContainer="container:ViggoClean.xcodeproj"/>'
+(schemes / "ViggoClean.xcscheme").write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion="1600" version="1.3">
+ <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{reference}</BuildActionEntry></BuildActionEntries></BuildAction>
+ <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable></LaunchAction>
+ <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES"><BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable></ProfileAction>
+ <AnalyzeAction buildConfiguration="Debug"/>
+ <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
+</Scheme>
+''')
+
+info = dict(CFBundleName="ViggoClean", CFBundleDisplayName="ViggoClean",
+            CFBundleIdentifier="com.loshi.viggoclean", CFBundleExecutable="ViggoClean",
+            CFBundlePackageType="APPL", CFBundleShortVersionString="0.2.0", CFBundleVersion="2",
+            LSMinimumSystemVersion="14.0", NSHighResolutionCapable=True,
+            NSPrincipalClass="NSApplication", CFBundleIconFile="AppIcon",
+            NSHumanReadableCopyright="Personal software by tloshi")
+with (root / "Info.plist").open("wb") as f:
+    plistlib.dump(info, f)
+print("Generated ViggoClean.xcodeproj and Info.plist")
