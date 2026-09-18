@@ -78,6 +78,9 @@ if [ "$SAFECLEANER_NOTARIZE" -eq 1 ]; then
     rm -f "$SAFECLEANER_DMG"
     hdiutil create -volname SafeCleaner -srcfolder "$SAFECLEANER_APP" \
         -ov -format UDZO -quiet "$SAFECLEANER_DMG"
+    # Sign the image itself as well as the app: an unsigned disk image is stapled
+    # but still reports "no usable signature" to Gatekeeper's own assessment.
+    codesign --force --sign "$SAFECLEANER_IDENTITY" --timestamp "$SAFECLEANER_DMG"
     # Notarize and staple the DMG: that is what the user actually downloads.
     if ! xcrun notarytool submit "$SAFECLEANER_DMG" \
             --keychain-profile "$SAFECLEANER_NOTARY_PROFILE" --wait; then
