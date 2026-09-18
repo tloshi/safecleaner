@@ -1,0 +1,92 @@
+SafeCleaner End User License Agreement
+
+Copyright (c) 2026 Taulant Loshi. All rights reserved.
+
+This software is proprietary. It is not open source. Reading this source code
+grants no right to use, copy, modify or distribute it.
+
+By installing or using SafeCleaner (the "Software") you agree to these terms. If
+you do not agree, do not install or use the Software.
+
+
+1. EVALUATION LICENSE
+
+You are granted a non-exclusive, non-transferable, revocable license to install
+and use the Software for evaluation for fourteen (14) days from first launch.
+The evaluation license is for that purpose only and carries no fee.
+
+
+2. PAID LICENSE
+
+After the evaluation period, continued use requires a valid paid license. A paid
+license is granted to one named individual and permits installation on any Mac
+that individual personally owns or controls, for that individual's own use. It
+is perpetual for the version purchased unless terminated under section 6.
+
+
+3. RESTRICTIONS
+
+Except to the extent applicable law expressly permits otherwise, you may not:
+
+  (a) copy, redistribute, sublicense, rent, lease, lend or sell the Software or
+      any part of it, including its source code;
+  (b) modify the Software, or create derivative works from it;
+  (c) reverse engineer, decompile or disassemble the Software;
+  (d) remove, obscure or alter any copyright, licensing or attribution notice;
+  (e) circumvent, disable or interfere with the evaluation period, license
+      validation, or any other licensing mechanism; or
+  (f) use the Software to develop a competing product.
+
+
+4. RESERVATION OF RIGHTS
+
+The Software is licensed, not sold. All right, title and interest in the
+Software, including all intellectual property rights, remain with the copyright
+holder. No rights are granted other than those stated here.
+
+
+5. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, TITLE AND NONINFRINGEMENT.
+
+THE SOFTWARE MOVES FILES YOU SELECT TO THE TRASH. YOU ARE SOLELY RESPONSIBLE FOR
+REVIEWING EVERY ITEM BEFORE CONFIRMING, AND FOR MAINTAINING BACKUPS OF ANY DATA
+YOU CANNOT AFFORD TO LOSE. THE SOFTWARE DOES NOT GUARANTEE THAT ANY PARTICULAR
+FILE IS SAFE TO REMOVE, AND DOES NOT GUARANTEE THAT DISK SPACE WILL BE
+RECLAIMED.
+
+
+6. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
+AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR ITS USE, INCLUDING WITHOUT LIMITATION ANY LOSS OF DATA,
+LOSS OF PROFITS, OR BUSINESS INTERRUPTION, EVEN IF ADVISED OF THE POSSIBILITY OF
+SUCH DAMAGE.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE TOTAL AGGREGATE LIABILITY
+OF THE COPYRIGHT HOLDER UNDER THIS AGREEMENT SHALL NOT EXCEED THE AMOUNT YOU
+ACTUALLY PAID FOR THE SOFTWARE.
+
+Nothing in this agreement limits liability that cannot be limited under
+applicable law, including liability for death or personal injury caused by
+negligence, or for fraud. Where you are a consumer, your statutory rights are
+not affected.
+
+
+7. TERMINATION
+
+This license terminates automatically if you breach any of its terms. On
+termination you must stop using the Software and remove all copies of it.
+
+
+8. THIRD-PARTY SOFTWARE
+
+The Software bundles no third-party libraries. It is built with Apple's
+frameworks and toolchain, which are governed by Apple's own terms.
+
+
+Contact: taulant.loshi@gmail.com

@@ -90,7 +90,7 @@ info = dict(CFBundleName="SafeCleaner", CFBundleDisplayName="SafeCleaner",
             NSPrincipalClass="NSApplication", CFBundleIconFile="AppIcon",
             CFBundleIconName="AppIcon",
             LSApplicationCategoryType="public.app-category.developer-tools",
-            NSHumanReadableCopyright="Personal software by tloshi")
+            NSHumanReadableCopyright="Copyright © 2026 Taulant Loshi. All rights reserved.")
 with (root / "Info.plist").open("wb") as f:
     plistlib.dump(info, f)
 print("Generated SafeCleaner.xcodeproj and Info.plist")

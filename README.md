@@ -181,7 +181,7 @@ Tests/SafeCleanerCoreTests/          Filesystem safety and repository tests
 Tests/SafeCleanerPresentationTests/  ViewModel tests with a fake repository
 docs/ROADMAP.md              Product, UI and engineering roadmap (Shqip)
 docs/ARCHITECTURE.md         Invariants, limitations and extension guidance
-scripts/build-app.sh        Build and ad-hoc sign the local .app
+scripts/build-app.sh        Build, sign (Developer ID) and optionally notarize the .app
 scripts/generate-project.py Regenerate the checked-in Xcode project
 ```
 
@@ -193,3 +193,13 @@ scripts/generate-project.py Regenerate the checked-in Xcode project
 - [Swift Package Manager](https://github.com/swiftlang/swift-package-manager)
 
 No real user files are removed by the tests. Tests inject a synthetic Trash destination.
+
+## License
+
+Proprietary. See [LICENSE](LICENSE).
+
+SafeCleaner is not open source. The source is published for inspection — reading it grants no right
+to use, copy, modify or redistribute it. Planned model: a 14-day evaluation, then a paid license.
+
+Nothing enforces the evaluation period yet. Until a licensing mechanism exists, the LICENSE
+describes the intended terms rather than terms the app applies on its own.
