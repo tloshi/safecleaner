@@ -49,12 +49,13 @@ The Swift package is also openable in Xcode. The `.xcodeproj` produces the nativ
 Every release is built, notarized and stapled from a clean tree. The keychain profile created by
 `notarytool store-credentials` is permanent, so only the first release needs that step.
 
-1. **Bump the version.** It currently lives in two places and they drift silently:
-   - `scripts/generate-project.py` — `CFBundleShortVersionString` and `CFBundleVersion`,
-     then run `python3 scripts/generate-project.py` to rewrite `Info.plist`.
-   - `Sources/SafeCleaner/Views/WorkspaceScreens.swift` — the About line.
+1. **Bump the version.** It lives in exactly one place: `scripts/generate-project.py`
+   (`CFBundleShortVersionString` and `CFBundleVersion`). Run `python3 scripts/generate-project.py`
+   to rewrite `Info.plist`.
 
-   Do not hand-edit `Info.plist`; the generator owns it and will overwrite the change.
+   Do not hand-edit `Info.plist`; the generator owns it and will overwrite the change. The About
+   line reads the version through `ViewState`, so it cannot drift from the bundle — that is what
+   `testVersionReachesViewState` protects.
 
 2. **Verify.**
 
@@ -71,18 +72,58 @@ Every release is built, notarized and stapled from a clean tree. The keychain pr
    ./scripts/build-app.sh --notarize
    ```
 
-   Expect two to fifteen minutes at the `--wait` step; that is Apple's queue, not a hang.
-   Success reports `status: Accepted` followed by `The staple and validate action worked!`.
-   The ticket is stapled to `build/SafeCleaner.dmg`, which is what people download, so the
-   image validates offline. The script's closing Gatekeeper line re-checks the `.app`, which
-   was signed before the submission and carries no ticket of its own — judge the run by the
-   stapler result, not that line.
+   This submits **twice** and waits both times, so expect roughly double the queue — two to
+   fifteen minutes per pass. That is Apple's queue, not a hang. Each pass reports
+   `status: Accepted` followed by `The staple and validate action worked!`.
+
+   Both the `.app` and the `.dmg` end up with a stapled ticket. See
+   [How the disk image is built](#how-the-disk-image-is-built) for why it takes two passes.
 
 5. **Tag and ship.**
 
    ```sh
    git tag -a v0.3.0 -m "SafeCleaner 0.3.0"
    ```
+
+### How the disk image is built
+
+Creating the image itself is one command — everything else is signing and notarization around it:
+
+```sh
+hdiutil create -volname SafeCleaner -srcfolder <folder> -ov -format UDZO build/SafeCleaner.dmg
+```
+
+`-format UDZO` is compressed and read-only, `-ov` overwrites. `build-app.sh` runs this against a
+staging folder rather than against the bundle directly, because the staging folder is what lets the
+image carry an `/Applications` alias:
+
+```text
+Applications -> /Applications
+SafeCleaner.app
+```
+
+That is the drag-to-install window people expect. Pointing `-srcfolder` at `SafeCleaner.app` yields
+an image containing only the app, with nothing to drag it onto.
+
+The order of the remaining steps is load-bearing:
+
+1. **Sign the app** — the image captures whatever state the bundle is in, so signing has to come
+   first.
+2. **Notarize and staple the app.** Stapling rewrites the bundle, so it must happen before
+   `hdiutil` captures it. Skipping this pass leaves the copy dragged to `/Applications` without a
+   local ticket: its first launch then needs a round trip to Apple, and warns anyone who is offline.
+   The app is submitted as a `ditto -c -k --keepParent` zip, which preserves the symlinks and
+   extended attributes inside a bundle in a way `zip` does not.
+3. **Create the image** from the stapled app.
+4. **Sign the image.** An unsigned image still staples and still validates, but reports
+   `code object is not signed at all` to `codesign` and "no usable signature" to Gatekeeper's own
+   assessment.
+5. **Notarize and staple the image** — that is the file people actually download.
+
+Styling the mounted window further (size, icon positions, a background image) means creating the
+image as `-format UDRW`, mounting it, setting the layout through Finder AppleScript, unmounting and
+`hdiutil convert`-ing to `UDZO`. Tools like `create-dmg` wrap that, at the cost of the first
+third-party dependency in a project that currently has none.
 
 ### Version numbers
 
