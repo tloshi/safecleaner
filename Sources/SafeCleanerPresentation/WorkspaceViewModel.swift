@@ -27,6 +27,7 @@ import SafeCleanerCore
         started = true
         let snapshot = await repository.load()
         session.settings = snapshot.settings; session.records = snapshot.history; session.disk = snapshot.disk
+        session.historyAvailable = snapshot.historyAvailable
         session.message = snapshot.notices.isEmpty ? nil : snapshot.notices.joined(separator: "\n")
         if let previewReport { apply(previewReport) }
         session.operation = .idle
@@ -82,6 +83,24 @@ import SafeCleanerCore
                 session.selected.formIntersection(session.candidates.map(\.id))
                 closeConfirmation()
             }
+        case .resetHistory:
+            // Only offered while the stored history is unreadable. Discarding a readable
+            // activity log is not something this action should be able to do by mistake.
+            guard !session.historyAvailable, !state.isBusy else { return nil }
+            session.operation = .loading; session.message = nil; publish()
+            let task = Task<Void, Never> { [weak self] in
+                guard let self else { return }
+                do {
+                    self.session.records = try await self.repository.resetHistory()
+                    self.session.historyAvailable = true
+                } catch {
+                    // Leave historyAvailable false: a failed reset is not a recovery.
+                    self.session.message = error.localizedDescription
+                }
+                self.session.operation = .idle; self.activeTask = nil; self.publish()
+            }
+            activeTask = task
+            return task
         case .revealCandidate(let id):
             if previewReport == nil, let candidate = item(id) { repository.reveal(candidate.url) }
         case .revealHistory(let id):

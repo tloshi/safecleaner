@@ -32,7 +32,8 @@ import Foundation
         var capacity = DiskCapacity.unavailable
         do { capacity = try await disk.capacity() }
         catch { notices.append("Disk information unavailable: \(error.localizedDescription)") }
-        return WorkspaceSnapshot(settings: settings, history: history, disk: capacity, notices: notices)
+        return WorkspaceSnapshot(settings: settings, history: history, disk: capacity,
+                                 notices: notices, historyAvailable: historyAvailable)
     }
 
     public func scan(progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport {
@@ -110,5 +111,19 @@ import Foundation
         }
         return CleanupBatchResult(records: completed, history: history)
     }
+    /// Discarding the history is destructive to the activity log, so it stays an explicit
+    /// user action and never happens automatically on a read failure. The in-memory history
+    /// is only cleared once the empty file is on disk: a failed write must leave the
+    /// repository paused rather than claim a recovery that did not happen.
+    public func resetHistory() async throws -> [CleanupRecord] {
+        guard !cleaning else {
+            throw SafetyError.refused("Wait for the current cleanup to finish.")
+        }
+        try await historyStore.save([])
+        history = []
+        historyAvailable = true
+        return history
+    }
+
     public func reveal(_ url: URL) { desktop.reveal(url) }
 }

@@ -62,6 +62,7 @@ enum WorkspacePresenter {
                 result: record.error ?? "Moved to Trash · \(byteLabel(record.bytes)) · Space not yet reclaimed",
                 failed: record.error != nil, canReveal: record.trashPath != nil && !preview)
         }
+        state.historyNeedsReset = !session.historyAvailable
         state.showConfirmation = session.showConfirmation
         state.confirmationItems = selected.map(row)
         state.confirmationAcknowledged = session.acknowledged

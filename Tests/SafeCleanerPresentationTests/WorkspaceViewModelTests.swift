@@ -17,6 +17,33 @@ import SafeCleanerCore
         return (vm, repository)
     }
 
+    /// A history the build cannot read pauses cleanup. The view needs a flag, not just the
+    /// notice text, or there is nothing to attach a recovery control to.
+    func testUnreadableHistoryOffersReset() async {
+        let repository = FakeRepository()
+        repository.historyAvailable = false
+        repository.notices = ["Activity history could not be read."]
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        XCTAssertTrue(vm.state.historyNeedsReset)
+
+        await vm.send(.resetHistory)?.value
+        XCTAssertEqual(repository.resetCalls, 1)
+        XCTAssertFalse(vm.state.historyNeedsReset)
+    }
+
+    func testFailedResetKeepsTheOfferAndReportsWhy() async {
+        let repository = FakeRepository()
+        repository.historyAvailable = false
+        repository.resetError = SafetyError.refused("Disk is read-only")
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+
+        await vm.send(.resetHistory)?.value
+        XCTAssertTrue(vm.state.historyNeedsReset, "a failed reset must not look like a recovery")
+        XCTAssertEqual(vm.state.message, "Disk is read-only")
+    }
+
     func testVersionReachesViewState() async {
         let repository = FakeRepository()
         let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
@@ -165,17 +192,19 @@ import SafeCleanerCore
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {
-    var loads = 0, scans = 0, cleanCalls = 0, settingsWrites = 0, reveals = 0
+    var loads = 0, scans = 0, cleanCalls = 0, settingsWrites = 0, reveals = 0, resetCalls = 0
     var cleanedIDs: [String] = []
     var settings = WorkspaceSettings()
     var report = ScanReport()
-    var scanError: Error?, settingsError: Error?, cleanupError: Error?
+    var notices: [String] = []
+    var historyAvailable = true
+    var scanError: Error?, settingsError: Error?, cleanupError: Error?, resetError: Error?
     var cleanupResult: CleanupBatchResult?
     var delayScan = false
     var progress: (@Sendable (String) -> Void)?
     func load() async -> WorkspaceSnapshot {
         loads += 1
-        return .init(settings: settings, history: [], disk: .init(total: 100, free: 20))
+        return .init(settings: settings, history: [], disk: .init(total: 100, free: 20), notices: notices, historyAvailable: historyAvailable)
     }
     func scan(progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport {
         scans += 1; self.progress = progress
@@ -191,6 +220,11 @@ import SafeCleanerCore
         settingsWrites += 1; settings.exclusions.append(url); return settings
     }
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings { settingsWrites += 1; return settings }
+    func resetHistory() async throws -> [CleanupRecord] {
+        resetCalls += 1
+        if let resetError { throw resetError }
+        return []
+    }
     func clean(_ items: [Candidate]) async throws -> CleanupBatchResult {
         cleanCalls += 1; cleanedIDs = items.map(\.id)
         if let cleanupError { throw cleanupError }

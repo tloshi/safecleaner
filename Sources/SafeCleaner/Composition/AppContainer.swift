@@ -55,6 +55,7 @@ private enum PreviewFixtures {
     func exclude(_ url: URL) throws -> WorkspaceSettings { throw disabled }
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings { throw disabled }
     func clean(_ items: [Candidate]) async throws -> CleanupBatchResult { throw disabled }
+    func resetHistory() async throws -> [CleanupRecord] { throw disabled }
     func reveal(_ url: URL) {}
     private var disabled: SafetyError { .refused("Preview mode cannot change files or preferences.") }
 }

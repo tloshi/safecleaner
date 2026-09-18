@@ -23,6 +23,7 @@ public enum WorkspaceAction {
     case toggleCandidate(String), clearSelection, excludeCandidate(String), revealCandidate(String)
     case addProjectFolder, removeProjectFolder(String), removeExclusion(String), revealHistory(UUID)
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
+    case resetHistory
 }
 
 public struct CategorySummary: Identifiable {
@@ -101,6 +102,8 @@ public struct WorkspaceViewState {
     public internal(set) var projectRoots: [LocationRowState] = []
     public internal(set) var exclusions: [LocationRowState] = []
     public internal(set) var history: [HistoryRowState] = []
+    /// The stored history could not be read, so cleanup is paused until it is reset.
+    public internal(set) var historyNeedsReset = false
     public internal(set) var showConfirmation = false
     public internal(set) var confirmationItems: [CandidateRowState] = []
     public internal(set) var confirmationAcknowledged = false
@@ -118,6 +121,7 @@ struct WorkspaceSession {
     var issues: [ScanIssue] = []
     var settings = WorkspaceSettings()
     var records: [CleanupRecord] = []
+    var historyAvailable = true
     var disk = DiskCapacity.unavailable
     var lastScan: Date?
     var progress = "Preparing your workspace…"

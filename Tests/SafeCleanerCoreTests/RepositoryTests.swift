@@ -24,6 +24,37 @@ import XCTest
         XCTAssertEqual(moves, 0); XCTAssertEqual(saves, 0)
     }
 
+    /// An unreadable history pauses cleanup (testUnavailableHistoryBlocksCleanupWithoutOverwritingIt).
+    /// Without a way back that pause is permanent and the only fix is deleting a file by hand.
+    func testResetHistoryRestoresCleanupAfterAnUnreadableFile() async throws {
+        let history = FakeHistory(), cleaner = FakeCleaner()
+        await history.setLoadFailure()
+        let repository = make(history: history, cleaner: cleaner)
+        _ = await repository.load()
+        do { _ = try await repository.clean([fixture()]); XCTFail("Should refuse") } catch {}
+
+        let recovered = try await repository.resetHistory()
+        XCTAssertTrue(recovered.isEmpty)
+        _ = try await repository.clean([fixture()])
+        let moves = await cleaner.calls
+        XCTAssertEqual(moves, 1, "cleanup should work again after the reset")
+    }
+
+    /// Reset writes an empty history. If that write fails the file is untouched, so the
+    /// repository must stay paused rather than report a recovery that did not happen.
+    func testFailedResetLeavesCleanupPaused() async {
+        let history = FakeHistory(), cleaner = FakeCleaner()
+        await history.setLoadFailure()
+        await history.failSave(number: 1)
+        let repository = make(history: history, cleaner: cleaner)
+        _ = await repository.load()
+
+        do { _ = try await repository.resetHistory(); XCTFail("Should propagate") } catch {}
+        do { _ = try await repository.clean([fixture()]); XCTFail("Should still refuse") } catch {}
+        let moves = await cleaner.calls
+        XCTAssertEqual(moves, 0)
+    }
+
     func testPreflightSaveFailurePreventsAnyMove() async {
         let history = FakeHistory(), cleaner = FakeCleaner()
         await history.failSave(number: 1)

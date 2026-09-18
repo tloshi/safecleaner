@@ -20,8 +20,13 @@ public struct WorkspaceSnapshot: Sendable {
     public let history: [CleanupRecord]
     public let disk: DiskCapacity
     public let notices: [String]
-    public init(settings: WorkspaceSettings, history: [CleanupRecord], disk: DiskCapacity, notices: [String] = []) {
-        self.settings = settings; self.history = history; self.disk = disk; self.notices = notices
+    /// False when the stored history could not be read, which pauses cleanup. The view
+    /// needs this as a flag rather than as notice prose so it can offer the recovery.
+    public let historyAvailable: Bool
+    public init(settings: WorkspaceSettings, history: [CleanupRecord], disk: DiskCapacity,
+                notices: [String] = [], historyAvailable: Bool = true) {
+        self.settings = settings; self.history = history; self.disk = disk
+        self.notices = notices; self.historyAvailable = historyAvailable
     }
 }
 
@@ -70,5 +75,8 @@ public protocol ProjectRootValidating: Sendable {
     func exclude(_ url: URL) throws -> WorkspaceSettings
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings
     func clean(_ items: [Candidate]) async throws -> CleanupBatchResult
+    /// Discard the stored activity history and start a new one. The recovery path for a
+    /// history file this build cannot read, which otherwise pauses cleanup permanently.
+    func resetHistory() async throws -> [CleanupRecord]
     func reveal(_ url: URL)
 }

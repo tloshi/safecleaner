@@ -57,6 +57,22 @@ struct ActivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 PageHeading(eyebrow: "EVERY STEP, VISIBLE", title: "Every action, accounted for.", subtitle: "A local record of what moved and what stayed.")
+                // Cleanup is paused whenever the stored history cannot be read. Without a
+                // control here the only way out is deleting a file by hand in Finder.
+                if state.historyNeedsReset {
+                    Card {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Activity history unreadable", systemImage: "exclamationmark.triangle")
+                                .font(.system(size: 13, weight: .medium)).foregroundStyle(.orange)
+                            Text("Cleanup stays paused while the record of past actions cannot be read, so nothing moves without being written down first.")
+                                .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            Text("Starting a new history discards the old record. Files already in Trash are not affected.")
+                                .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            Button("Start a new history") { send(.resetHistory) }
+                                .disabled(state.isBusy)
+                        }
+                    }
+                }
                 if state.history.isEmpty {
                     EmptyState(symbol: "clock.arrow.circlepath", title: "A clean slate", detail: "Your first cleanup will appear here. Scanning never changes files.")
                 } else {
