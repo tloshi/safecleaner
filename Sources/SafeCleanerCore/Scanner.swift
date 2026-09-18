@@ -125,6 +125,10 @@ public struct DiskScanner: Sendable {
                 try FileSafety.validate(root, root: c.home)
                 var queue: [(URL, Int)] = [(root, 0)]
                 var visited = 0
+                // One line per root, not per folder. A single unnominated build tree can
+                // otherwise bury every real finding: before build output was cleanable,
+                // one Xcode project produced 2,359 identical depth-limit issues.
+                var deepestSkipped = 0
                 while let (directory, depth) = queue.popLast() {
                     try Task.checkCancellation()
                     guard !excluded(directory) else { continue }
@@ -136,28 +140,34 @@ public struct DiskScanner: Sendable {
                     do { children = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]) }
                     catch { report.issues.append(.init(path: directory.path, message: error.localizedDescription)); continue }
                     let names = Set(children.map(\.lastPathComponent))
-                    let nodeProject = names.contains("package.json")
-                    let dartProject = names.contains("pubspec.yaml")
-                    let gradleProject = names.contains("build.gradle") || names.contains("build.gradle.kts")
                     for child in children {
                         guard !excluded(child) else { continue }
                         let values: URLResourceValues
                         do { values = try child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]) }
                         catch { report.issues.append(.init(path: child.path, message: error.localizedDescription)); continue }
-                        guard values.isDirectory == true, values.isSymbolicLink != true, values.isPackage != true else { continue }
+                        guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
                         let name = child.lastPathComponent
-                        let candidate = (name == ".next" && nodeProject) || (name == ".dart_tool" && dartProject)
-                            || (name == "build" && (dartProject || gradleProject))
-                        if candidate {
+                        // Build output is cleanable. It is regenerable by definition, so the
+                        // worst case is a slower next build rather than lost work, and it
+                        // still moves to Trash like everything else. The staleness line is
+                        // per candidate because it is the thing worth deciding on.
+                        if let rule = BuildOutput.rule(for: name, siblings: names) {
+                            let idle = BuildOutput.idleDays(child)
                             try add(child, title: "\(directory.lastPathComponent) / \(name)", category: .projects, root: root,
-                                    reason: "Generated-folder candidate beside a project manifest. Detection is provisional.",
-                                    consequence: "Scan-only in v0.1. Project-aware cleanup will arrive after tool-specific validation.", canTrash: false)
+                                    reason: "\(rule.label.prefix(1).uppercased() + rule.label.dropFirst()) beside \(name == "__pycache__" ? "Python sources" : "its project manifest"). \(BuildOutput.idleLabel(idle))",
+                                    consequence: rule.consequence + " Close the editor and stop any running build first.")
                             continue
                         }
+                        guard values.isPackage != true else { continue }
                         guard !name.hasPrefix("."), !["node_modules", "vendor", "Pods", "Library", "Pictures", "Photos Library.photoslibrary"].contains(name) else { continue }
                         if depth < 8 { queue.append((child, depth + 1)) }
-                        else { report.issues.append(.init(path: child.path, message: "Depth limit reached; this folder was not scanned.")) }
+                        else { deepestSkipped += 1 }
                     }
+                }
+                if deepestSkipped > 0 {
+                    report.issues.append(.init(path: root.path, message:
+                        "Depth limit reached: \(deepestSkipped) folder\(deepestSkipped == 1 ? " was" : "s were") "
+                        + "not scanned past 8 levels. Add a deeper folder as its own project root to include them."))
                 }
             } catch is CancellationError { throw CancellationError() }
             catch { report.issues.append(.init(path: root.path, message: error.localizedDescription)) }

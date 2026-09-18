@@ -179,6 +179,9 @@ final class SafetyTests: XCTestCase {
         XCTAssertTrue(report.candidates.isEmpty)
         XCTAssertTrue(report.issues.contains { $0.message.contains("excluded") })
     }
+    /// `projects/important/build` holds a real document and has no manifest beside it, so it
+    /// must stay invisible. That the manifest is required is the whole guarantee now that
+    /// build output is cleanable rather than scan-only.
     func testProjectDetectionNeedsManifestAndDoesNotDuplicateRoots() throws {
         try file("projects/web/package.json", data: "{}")
         try file("projects/web/.next/data")
@@ -187,7 +190,12 @@ final class SafetyTests: XCTestCase {
             projectRoots: [home.appendingPathComponent("projects"), home.appendingPathComponent("projects/web")]))
         XCTAssertEqual(report.candidates.count, 1)
         XCTAssertEqual(report.candidates.first?.url.lastPathComponent, ".next")
-        XCTAssertEqual(report.candidates.first?.canTrash, false)
+        // POLICY CHANGE: build output was scan-only ("cleanup will arrive after tool-specific
+        // validation"). It is regenerable by definition, so the worst case is a slower next
+        // build, and it still goes to Trash. Leaving it scan-only meant the app reclaimed
+        // none of the 32 GB that regrew in the author's project folders in one month.
+        XCTAssertEqual(report.candidates.first?.canTrash, true)
+        XCTAssertTrue(report.candidates[0].reason.contains("Last built"), "staleness should be on the candidate")
     }
     func testRecentLogsAreKeptAndOldLogsAreCandidates() throws {
         try file("Library/Logs/recent.log")
