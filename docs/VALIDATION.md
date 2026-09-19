@@ -1,6 +1,6 @@
 # Validation
 
-## Unreleased — audit remediation, 19 September 2026
+## 0.3.0 — audit remediation and project build output, 19 September 2026
 
 Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
 
@@ -44,21 +44,47 @@ Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.
 - **End-to-end against the author's real `~/AndroidStudioProjects`, driving the actual `DiskScanner`:**
   81 project candidates, **30,1 GB**, all cleanable, 20,2 GB idle 30+ days. All categories:
   **214 candidates, 46,27 GB** — against the 1,83 GB the audit measured. Scan issues 2,372 → 14.
-- Regression after these changes: **51 XCTest tests passed** (18 filesystem safety, 9 repository,
-  7 build output, 5 history format, 13 ViewModel — with one deliberate policy assertion rewritten as
-  described above), boundary checker passed, `xcodebuild` Debug build succeeded.
+- Intermediate regression after the scanner work: 51 XCTest tests passed, with one deliberate policy
+  assertion rewritten as described above.
+
+- **Tool command allowlist (no execution yet).** Simulator runtimes, Docker images and Homebrew
+  downloads cannot be reclaimed by moving folders — deleting them corrupts the owning tool — so the
+  app will run commands. `ToolCommand.init` is private, so the only instances that exist are the
+  literals in the catalogue; arguments are compile-time literals; `Process` receives an executable
+  and an argv with no shell; paths are absolute and re-validated before each run. Ownership is
+  deliberately **not** required to be root, because Homebrew on Apple Silicon and the Android tools
+  install into user-owned prefixes; what is checked is that *other* users cannot modify the binary.
+  Flags were verified against the installed tools rather than assumed. 13 tests, including that the
+  real `xcrun`, `brew` and `docker` on this machine pass validation. **Nothing executes yet.**
+- **Access warnings now cover only what the scanner reads.** The first version demanded Full Disk
+  Access to read Trash — a folder the scanner permanently protects and never cleans — so no grant
+  could clear the warning and it returned after every launch. Probes are now `~/Library/Caches`,
+  `~/Library/Logs` and the user's project roots. Verified against the real home directory: nothing
+  blocked, warning absent.
+- **Three defects found by using the app, not by the suite.** All three passed a green test run:
+  the sidebar still read `viggoclean` (built as `Text("viggo") + Text("clean")`, so no search for
+  the product name could match it); the Overview reported 30,11 GB of project builds as "Scan only"
+  because the label was keyed off the category rather than the candidates; and the permission loop
+  above. The first is now guarded by `check-boundaries.py`, which greps the rendering layers for the
+  fragment and fails the build — verified by reintroducing the old string.
+- Regression at release: **75 XCTest tests passed** (60 core, 15 presentation), boundary checker
+  passed, `xcodebuild` Debug build succeeded.
 
 ### Not performed
 
-- No release build, signing or notarization run since these changes. `build/` still holds the 0.2.1
-  artifacts, whose bundled copyright string is stale.
-- **No cleanup has actually been executed against the real candidates.** Everything above is
-  measurement through the real scanner; no file on the author's machine has been moved to Trash by
-  the new rules. Do that on one small candidate before trusting a 30 GB batch.
+- **NO CLEANUP HAS EVER BEEN EXECUTED.** This is the significant gap in this release. Every number
+  above is measurement through the real scanner; not one file has been moved to Trash by the new
+  rules, in testing or in use. The cleanup path is covered by unit tests against synthetic files and
+  in-memory fakes only. Trash and restore one small stale candidate before trusting a 30 GB batch.
+- The three defects listed above were found by opening the app, while the suite was green. Treat the
+  passing count as evidence about the core, not about the product.
+- Tool commands do not execute. The allowlist and its validation are complete and tested; no runner
+  exists, so simulator runtimes, Docker images and Homebrew downloads are still unreachable.
 - 7 build directories still refuse on interior hard links, and 3 on cross-volume or special files.
   Neither was investigated.
-- The reset control and the build-output list were verified through the ViewModel and scanner, not
-  by driving the real UI.
+- The history reset control has never been exercised in the running app, only through the ViewModel.
+- Whether Full Disk Access makes the 39 GB of simulator runtimes reachable is **unverified**; the
+  assumption that it does has not been tested.
 - The 30-day idle threshold is displayed, not enforced: nothing filters or sorts by it yet, so the
   user still reads the age per row.
 - Tests use synthetic files and in-memory fakes throughout.
