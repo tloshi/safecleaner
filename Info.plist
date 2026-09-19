@@ -24,6 +24,12 @@
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>SafeCleaner looks for build output and caches in folders you add. It never moves anything without you reviewing and confirming it first.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>SafeCleaner looks for build output and caches in folders you add. It never moves anything without you reviewing and confirming it first.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>SafeCleaner reports what Downloads is using so it is not invisible to you. It never moves anything without you reviewing and confirming it first.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

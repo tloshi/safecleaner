@@ -23,7 +23,7 @@ public enum WorkspaceAction {
     case toggleCandidate(String), clearSelection, excludeCandidate(String), revealCandidate(String)
     case addProjectFolder, removeProjectFolder(String), removeExclusion(String), revealHistory(UUID)
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
-    case resetHistory
+    case resetHistory, openFullDiskAccessSettings
 }
 
 public struct CategorySummary: Identifiable {
@@ -104,6 +104,11 @@ public struct WorkspaceViewState {
     public internal(set) var history: [HistoryRowState] = []
     /// The stored history could not be read, so cleanup is paused until it is reset.
     public internal(set) var historyNeedsReset = false
+    /// Locations the scanner cannot read. Empty means nothing is being hidden.
+    public internal(set) var blockedAreas: [String] = []
+    /// True when the block needs Full Disk Access, which macOS will not prompt for.
+    public internal(set) var needsFullDiskAccess = false
+    public internal(set) var noProjectRootsYet = false
     public internal(set) var showConfirmation = false
     public internal(set) var confirmationItems: [CandidateRowState] = []
     public internal(set) var confirmationAcknowledged = false
@@ -122,6 +127,7 @@ struct WorkspaceSession {
     var settings = WorkspaceSettings()
     var records: [CleanupRecord] = []
     var historyAvailable = true
+    var access = DiskAccessReport(blocked: [])
     var disk = DiskCapacity.unavailable
     var lastScan: Date?
     var progress = "Preparing your workspace…"

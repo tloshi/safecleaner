@@ -28,6 +28,7 @@ import SafeCleanerCore
         let snapshot = await repository.load()
         session.settings = snapshot.settings; session.records = snapshot.history; session.disk = snapshot.disk
         session.historyAvailable = snapshot.historyAvailable
+        if previewReport == nil { session.access = DiskAccess.report(home: URL(fileURLWithPath: homePath)) }
         session.message = snapshot.notices.isEmpty ? nil : snapshot.notices.joined(separator: "\n")
         if let previewReport { apply(previewReport) }
         session.operation = .idle
@@ -83,6 +84,8 @@ import SafeCleanerCore
                 session.selected.formIntersection(session.candidates.map(\.id))
                 closeConfirmation()
             }
+        case .openFullDiskAccessSettings:
+            if previewReport == nil { repository.openFullDiskAccessSettings() }
         case .resetHistory:
             // Only offered while the stored history is unreadable. Discarding a readable
             // activity log is not something this action should be able to do by mistake.

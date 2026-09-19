@@ -19,6 +19,41 @@ struct OverviewView: View {
                     }.buttonStyle(PrimaryButton()).disabled(!state.canScan && !state.isScanning)
                 }.padding(.top, 4)
 
+                // A scan that cannot read a folder otherwise just reports fewer bytes, with
+                // no error. That reads as "your Mac is clean", which is the worst thing a
+                // cleaner can say. Say what is hidden instead.
+                if !state.blockedAreas.isEmpty {
+                    Card {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Some locations are hidden from SafeCleaner", systemImage: "lock")
+                                .font(.system(size: 13, weight: .medium)).foregroundStyle(.orange)
+                            Text("macOS is blocking \(state.blockedAreas.joined(separator: ", ")). Anything in there is missing from your results — not counted, not shown.")
+                                .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            if state.needsFullDiskAccess {
+                                Text("macOS does not let an app ask for this. Turn on Full Disk Access for SafeCleaner in Settings, then quit and reopen the app.")
+                                    .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                Button("Open Full Disk Access settings") { send(.openFullDiskAccessSettings) }
+                            }
+                        }
+                    }
+                }
+
+                // The largest category on a developer's Mac is build output inside project
+                // folders, and it stays invisible until a root is added. Saying nothing here
+                // means the first scan under-reports by tens of GB for no visible reason.
+                if state.noProjectRootsYet {
+                    Card {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("No project folders added yet", systemImage: "folder.badge.plus")
+                                .font(.system(size: 13, weight: .medium))
+                            Text("Build output — node_modules, build, .gradle, Pods — is usually the biggest thing on a developer's Mac, and SafeCleaner only looks inside folders you add.")
+                                .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            Button("Add a projects folder") { send(.addProjectFolder) }
+                                .disabled(!state.canEditSettings)
+                        }
+                    }
+                }
+
                 HStack(spacing: 18) {
                     Card {
                         HStack(spacing: 20) {

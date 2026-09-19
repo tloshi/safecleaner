@@ -90,7 +90,19 @@ info = dict(CFBundleName="SafeCleaner", CFBundleDisplayName="SafeCleaner",
             NSPrincipalClass="NSApplication", CFBundleIconFile="AppIcon",
             CFBundleIconName="AppIcon",
             LSApplicationCategoryType="public.app-category.developer-tools",
-            NSHumanReadableCopyright="Copyright © 2026 Taulant Loshi. All rights reserved.")
+            NSHumanReadableCopyright="Copyright © 2026 Taulant Loshi. All rights reserved.",
+            # macOS shows its own prompt for these three the first time the app reads them,
+            # but only if the reason is declared here. Full Disk Access has no such prompt;
+            # the app can only explain it and deep-link to Settings.
+            NSDesktopFolderUsageDescription=(
+                "SafeCleaner looks for build output and caches in folders you add. "
+                "It never moves anything without you reviewing and confirming it first."),
+            NSDocumentsFolderUsageDescription=(
+                "SafeCleaner looks for build output and caches in folders you add. "
+                "It never moves anything without you reviewing and confirming it first."),
+            NSDownloadsFolderUsageDescription=(
+                "SafeCleaner reports what Downloads is using so it is not invisible to you. "
+                "It never moves anything without you reviewing and confirming it first."))
 with (root / "Info.plist").open("wb") as f:
     plistlib.dump(info, f)
 print("Generated SafeCleaner.xcodeproj and Info.plist")

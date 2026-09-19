@@ -60,6 +60,9 @@ public protocol HistoryStoring: Sendable {
 @MainActor public protocol DesktopInteracting {
     func chooseProjectFolders() async -> [URL]
     func runningApplicationIDs() -> Set<String>
+    /// Opens the Full Disk Access pane. macOS offers no API to request that permission,
+    /// so sending the user to the right pane is the most an app is permitted to do.
+    func openFullDiskAccessSettings()
     func reveal(_ url: URL)
 }
 public protocol ProjectRootValidating: Sendable {
@@ -79,4 +82,5 @@ public protocol ProjectRootValidating: Sendable {
     /// history file this build cannot read, which otherwise pauses cleanup permanently.
     func resetHistory() async throws -> [CleanupRecord]
     func reveal(_ url: URL)
+    func openFullDiskAccessSettings()
 }

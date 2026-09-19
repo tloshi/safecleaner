@@ -126,4 +126,5 @@ import Foundation
     }
 
     public func reveal(_ url: URL) { desktop.reveal(url) }
+    public func openFullDiskAccessSettings() { desktop.openFullDiskAccessSettings() }
 }

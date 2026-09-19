@@ -63,6 +63,9 @@ enum WorkspacePresenter {
                 failed: record.error != nil, canReveal: record.trashPath != nil && !preview)
         }
         state.historyNeedsReset = !session.historyAvailable
+        state.blockedAreas = session.access.blocked.map(\.label)
+        state.needsFullDiskAccess = session.access.needsSystemSettings
+        state.noProjectRootsYet = session.settings.projectRoots.isEmpty
         state.showConfirmation = session.showConfirmation
         state.confirmationItems = selected.map(row)
         state.confirmationAcknowledged = session.acknowledged

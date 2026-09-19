@@ -6,10 +6,22 @@ import SafeCleanerCore
 @MainActor final class UserDefaultsSettingsStore: SettingsStoring {
     private let defaults: UserDefaults
     init(defaults: UserDefaults) { self.defaults = defaults }
+    /// The rename to SafeCleaner changed the bundle identifier, which orphaned every
+    /// setting stored under the old one — exclusions a user chose deliberately silently
+    /// became an empty list. Read the old domain once when the new one has nothing.
+    private static let legacyDomain = "com.loshi.viggoclean"
+
     func load() -> WorkspaceSettings {
-        WorkspaceSettings(
-            projectRoots: (defaults.stringArray(forKey: "projectRoots") ?? []).map { URL(fileURLWithPath: $0) },
-            exclusions: (defaults.stringArray(forKey: "exclusions") ?? []).map { URL(fileURLWithPath: $0) })
+        var roots = defaults.stringArray(forKey: "projectRoots") ?? []
+        var exclusions = defaults.stringArray(forKey: "exclusions") ?? []
+        if roots.isEmpty && exclusions.isEmpty,
+           let legacy = UserDefaults(suiteName: Self.legacyDomain) {
+            roots = legacy.stringArray(forKey: "projectRoots") ?? []
+            exclusions = legacy.stringArray(forKey: "exclusions") ?? []
+        }
+        return WorkspaceSettings(
+            projectRoots: roots.map { URL(fileURLWithPath: $0) },
+            exclusions: exclusions.map { URL(fileURLWithPath: $0) })
     }
     func save(_ settings: WorkspaceSettings) throws {
         defaults.set(settings.projectRoots.map(\.path), forKey: "projectRoots")

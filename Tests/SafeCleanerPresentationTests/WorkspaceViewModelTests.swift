@@ -192,7 +192,7 @@ import SafeCleanerCore
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {
-    var loads = 0, scans = 0, cleanCalls = 0, settingsWrites = 0, reveals = 0, resetCalls = 0
+    var loads = 0, scans = 0, cleanCalls = 0, settingsWrites = 0, reveals = 0, resetCalls = 0, settingsOpens = 0
     var cleanedIDs: [String] = []
     var settings = WorkspaceSettings()
     var report = ScanReport()
@@ -233,4 +233,5 @@ import SafeCleanerCore
         return .init(records: records, history: records)
     }
     func reveal(_ url: URL) { reveals += 1 }
+    func openFullDiskAccessSettings() { settingsOpens += 1 }
 }

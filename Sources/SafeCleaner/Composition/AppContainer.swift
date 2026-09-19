@@ -57,5 +57,6 @@ private enum PreviewFixtures {
     func clean(_ items: [Candidate]) async throws -> CleanupBatchResult { throw disabled }
     func resetHistory() async throws -> [CleanupRecord] { throw disabled }
     func reveal(_ url: URL) {}
+    func openFullDiskAccessSettings() {}
     private var disabled: SafetyError { .refused("Preview mode cannot change files or preferences.") }
 }

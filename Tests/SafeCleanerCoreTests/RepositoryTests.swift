@@ -142,6 +142,7 @@ private struct FakeValidator: ProjectRootValidating { func validate(_ url: URL) 
     func chooseProjectFolders() async -> [URL] { [] }
     func runningApplicationIDs() -> Set<String> { running }
     func reveal(_ url: URL) {}
+    func openFullDiskAccessSettings() {}
 }
 private actor FakeHistory: HistoryStoring {
     var saves = 0
