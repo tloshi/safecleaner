@@ -36,7 +36,11 @@ enum WorkspacePresenter {
             let bytes = items.reduce(Int64(0)) { $0 + $1.bytes }
             return CategorySummary(category: category, title: category.title, detail: category.detail,
                 size: state.hasScanned ? byteLabel(bytes) : "—",
-                count: category == .projects ? "Scan only" : "\(items.count) \(items.count == 1 ? "item" : "items")",
+                // Derived from the candidates, not assumed from the category. Projects were
+                // scan-only once and this label kept saying so after they became cleanable.
+                count: !items.isEmpty && items.allSatisfy { !$0.canTrash }
+                    ? "Scan only"
+                    : "\(items.count) \(items.count == 1 ? "item" : "items")",
                 fraction: found > 0 ? Double(bytes) / Double(found) : 0)
         }
         func row(_ item: Candidate) -> CandidateRowState {

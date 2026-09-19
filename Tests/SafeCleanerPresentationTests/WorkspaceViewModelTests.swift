@@ -44,6 +44,31 @@ import SafeCleanerCore
         XCTAssertEqual(vm.state.message, "Disk is read-only")
     }
 
+    /// The Projects row said "Scan only" because the label was keyed off the category
+    /// rather than the data. Build output became cleanable and the summary kept claiming it
+    /// was not -- 30 GB on the author's Mac, reported as untouchable on the first screen.
+    func testCategorySummaryCountsItemsRatherThanAssumingTheCategory() async {
+        // Explicit rather than via `fixture`, whose `cleanable` flag also switches the
+        // category -- which is exactly the conflation this test exists to rule out.
+        let build = Candidate(url: URL(fileURLWithPath: "/fixture/app/build"), title: "app / build",
+            category: .projects, reason: "Build output. Last built 61 days ago.", consequence: "Slower next build",
+            stamp: .init(digest: "fixture", logicalBytes: 4096, allocatedBytes: 4096, fileCount: 1),
+            allowedRoot: URL(fileURLWithPath: "/fixture"), canTrash: true, ownerBundleID: nil)
+        let (vm, _) = await ready([build])
+        let projects = vm.state.categories.first { $0.category == .projects }
+        XCTAssertNotNil(projects)
+        XCTAssertEqual(projects?.count, "1 item")
+        XCTAssertNotEqual(projects?.count, "Scan only")
+    }
+
+    /// A genuinely scan-only category must still say so, or the fix would just invert the bug.
+    func testCategorySummaryStillMarksAnEntirelyScanOnlyCategory() async {
+        let locked = fixture("locked", cleanable: false)
+        let (vm, _) = await ready([locked])
+        let projects = vm.state.categories.first { $0.category == .projects }
+        XCTAssertEqual(projects?.count, "Scan only")
+    }
+
     func testVersionReachesViewState() async {
         let repository = FakeRepository()
         let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
