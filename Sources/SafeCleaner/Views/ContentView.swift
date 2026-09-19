@@ -61,8 +61,11 @@ struct ContentView: View {
                     .frame(width: 39, height: 39)
                     .background(LinearGradient(colors: [Palette.mint, Palette.mint.opacity(0.7)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
                     .shadow(color: Palette.mint.opacity(0.12), radius: 12)
-                (Text("viggo").font(.system(size: 25, weight: .bold, design: .rounded))
-                    + Text("clean").font(.system(size: 25, weight: .regular, design: .rounded)).foregroundColor(Palette.muted))
+                // Split across two Text calls for the weight contrast. That is also why the
+                // rename missed it: no grep for the old product name could match it.
+                (Text("safe").font(.system(size: 25, weight: .bold, design: .rounded))
+                    + Text("cleaner").font(.system(size: 25, weight: .regular, design: .rounded)).foregroundColor(Palette.muted))
+                    .accessibilityLabel("SafeCleaner")
             }.padding(.top, 43).padding(.bottom, 42)
             Text("WORKSPACE").font(.system(size: 9, weight: .semibold)).tracking(2).foregroundStyle(Palette.muted)
                 .padding(.leading, 12).padding(.bottom, 14)
