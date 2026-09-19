@@ -29,21 +29,29 @@ public struct DiskAccessReport: Sendable, Equatable {
 /// the gap. Silence would be worse: without this, a blocked scan reports fewer bytes with no
 /// error, which reads as "your Mac is clean".
 public enum DiskAccess {
-    static func probes(home: URL) -> [(URL, String, Bool)] {
-        [
-            (home.appendingPathComponent(".Trash"), "Trash", false),
-            (URL(fileURLWithPath: "/Library/Developer/CoreSimulator"), "Simulator runtimes", false),
-            (home.appendingPathComponent("Downloads"), "Downloads", true),
-            (home.appendingPathComponent("Desktop"), "Desktop", true),
-            (home.appendingPathComponent("Documents"), "Documents", true)
-        ]
+    /// Only what the scanner actually reads.
+    ///
+    /// The first version of this probed Trash, Desktop, Documents and Downloads, chosen
+    /// because they returned permission errors when the author's disk was measured. That was
+    /// wrong: the app never reads any of them. Trash in particular is on the scanner's
+    /// permanently protected list — it is never cleaned, by design — so demanding access to
+    /// it was a request no grant could satisfy, and the warning returned after every launch
+    /// no matter what the user did.
+    ///
+    /// A permission warning is only honest if granting it would change the result.
+    static func probes(home: URL, projectRoots: [URL] = []) -> [(URL, String, Bool)] {
+        [(home.appendingPathComponent("Library/Caches"), "your app caches", false),
+         (home.appendingPathComponent("Library/Logs"), "your logs", false)]
+        + projectRoots.map { ($0, $0.lastPathComponent, true) }
     }
 
-    public static func report(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> DiskAccessReport {
-        DiskAccessReport(blocked: probes(home: home).compactMap { url, label, promptable in
-            guard isDenied(url) else { return nil }
-            return BlockedArea(path: url.path, label: label, isPromptable: promptable)
-        })
+    public static func report(home: URL = FileManager.default.homeDirectoryForCurrentUser,
+                              projectRoots: [URL] = []) -> DiskAccessReport {
+        DiskAccessReport(blocked: probes(home: home, projectRoots: projectRoots)
+            .compactMap { url, label, promptable in
+                guard isDenied(url) else { return nil }
+                return BlockedArea(path: url.path, label: label, isPromptable: promptable)
+            })
     }
 
     /// Distinguishes "refused" from "absent". A missing folder is not a permission problem,

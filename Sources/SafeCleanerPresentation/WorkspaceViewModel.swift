@@ -28,7 +28,10 @@ import SafeCleanerCore
         let snapshot = await repository.load()
         session.settings = snapshot.settings; session.records = snapshot.history; session.disk = snapshot.disk
         session.historyAvailable = snapshot.historyAvailable
-        if previewReport == nil { session.access = DiskAccess.report(home: URL(fileURLWithPath: homePath)) }
+        if previewReport == nil {
+            session.access = DiskAccess.report(home: URL(fileURLWithPath: homePath),
+                                               projectRoots: snapshot.settings.projectRoots)
+        }
         session.message = snapshot.notices.isEmpty ? nil : snapshot.notices.joined(separator: "\n")
         if let previewReport { apply(previewReport) }
         session.operation = .idle

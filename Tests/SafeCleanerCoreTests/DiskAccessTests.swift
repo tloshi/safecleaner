@@ -34,12 +34,22 @@ final class DiskAccessTests: XCTestCase {
                        "absent must not be reported as a permission problem")
     }
 
-    func testReportDistinguishesPromptableFoldersFromFullDiskAccess() {
-        let promptable = Set(DiskAccess.probes(home: root).filter(\.2).map(\.1))
-        XCTAssertEqual(promptable, ["Downloads", "Desktop", "Documents"],
-                       "only these three raise a real macOS prompt")
-        let fda = DiskAccess.probes(home: root).filter { !$0.2 }.map(\.1)
-        XCTAssertTrue(fda.contains("Trash"))
+    /// A permission warning is only honest if granting it would change the result. The app
+    /// never reads Trash -- it is on the scanner's permanently protected list -- so asking
+    /// for access to it produced a warning no grant could clear, and it returned after every
+    /// launch. Probe only what the scanner actually reads.
+    func testProbesOnlyCoverWhatTheScannerReads() {
+        let labels = DiskAccess.probes(home: root).map(\.0.lastPathComponent)
+        XCTAssertEqual(labels, ["Caches", "Logs"])
+        for forbidden in [".Trash", "Desktop", "Documents", "Downloads"] {
+            XCTAssertFalse(labels.contains(forbidden), "\(forbidden) is never read by the scanner")
+        }
+    }
+
+    func testProjectRootsAreProbedBecauseTheScannerDoesReadThem() {
+        let added = URL(fileURLWithPath: "/tmp/MyProjects")
+        let probes = DiskAccess.probes(home: root, projectRoots: [added])
+        XCTAssertTrue(probes.contains { $0.0 == added })
     }
 
     func testAllClearReportNeedsNothing() {
