@@ -35,6 +35,7 @@ struct ProjectsView: View {
                         }
                     }
                 }
+                ProjectProtectionCard(state: state, send: send)
                 Card(accent: true) {
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Discovery first", systemImage: "eye").foregroundStyle(Palette.mint).font(.headline)
@@ -46,6 +47,44 @@ struct ProjectsView: View {
                     }
                 }
             }.padding(32)
+        }
+    }
+}
+
+/// "I'm working on this one today — don't touch it." A protected project is skipped by
+/// the scanner and refused by cleanup, until the switch is turned off again.
+private struct ProjectProtectionCard: View {
+    let state: WorkspaceViewState
+    let send: (WorkspaceAction) -> Void
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("Your projects", systemImage: "lock.shield").font(.headline)
+                Text("Turn on “Don’t touch” for a project you are working on. SafeCleaner will not scan or clean anything inside it; every other project is still included.")
+                    .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                if let empty = state.projectsEmptyMessage {
+                    Text(empty).font(.system(size: 12)).foregroundStyle(Palette.muted).padding(.vertical, 6)
+                }
+                if !state.canEditSettings, let status = state.busyStatus {
+                    Label(status, systemImage: "hourglass").font(.system(size: 11)).foregroundStyle(.orange)
+                }
+                ForEach(state.projects) { project in
+                    HStack(spacing: 14) {
+                        Image(systemName: project.isProtected ? "lock.fill" : "folder")
+                            .foregroundStyle(project.isProtected ? .orange : Palette.mint).frame(width: 18)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(project.title).font(.system(size: 13, weight: .medium))
+                            Text(project.detail).font(.system(size: 11)).foregroundStyle(project.isProtected ? .orange : Palette.muted)
+                        }
+                        Spacer()
+                        Toggle("Don’t touch", isOn: Binding(get: { project.isProtected },
+                                                           set: { send(.setProjectProtection(project.id, $0)) }))
+                            .toggleStyle(.switch).controlSize(.small).font(.system(size: 11))
+                            .disabled(!state.canEditSettings)
+                            .accessibilityLabel("Don’t touch \(project.title)")
+                    }.padding(.vertical, 6).help(project.path)
+                }
+            }
         }
     }
 }

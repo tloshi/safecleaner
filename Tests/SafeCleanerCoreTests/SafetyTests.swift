@@ -27,6 +27,111 @@ final class SafetyTests: XCTestCase {
                          canTrash: canTrash, ownerBundleID: nil)
     }
 
+    /// A permission refusal from macOS must say so and point at the fix, not read "failed".
+    func testTrashPermissionErrorIsReportedAsPermission() throws {
+        try file("Caches/denied/data.bin")
+        let item = try candidate("Caches/denied")
+        let engine = CleanupEngine { _ in
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError,
+                          userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM))])
+        }
+        let record = engine.perform(item)
+        XCTAssertEqual(record.failure, .permission)
+        XCTAssertNil(record.trashPath)
+        XCTAssertTrue(record.error?.contains("Full Disk Access") == true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: item.url.path), "a refused move leaves the item in place")
+    }
+
+    func testPermissionIsFoundInTheUnderlyingErrorChain() {
+        func wrapped(_ code: Int32, outer: Int = NSFileWriteUnknownError) -> NSError {
+            NSError(domain: NSCocoaErrorDomain, code: outer,
+                    userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(code))])
+        }
+        XCTAssertEqual(CleanupEngine.classify(wrapped(EPERM)), .permission)
+        // The innermost POSIX code decides, even under a Cocoa "no permission" wrapper.
+        XCTAssertEqual(CleanupEngine.classify(wrapped(EACCES, outer: NSFileWriteNoPermissionError)), .ownership)
+        XCTAssertEqual(CleanupEngine.classify(wrapped(ENOENT)), .changed)
+        XCTAssertEqual(CleanupEngine.classify(CocoaError(.fileNoSuchFile)), .changed)
+        XCTAssertEqual(CleanupEngine.classify(CocoaError(.fileWriteOutOfSpace)), .other)
+        // A bare Cocoa denial does not say which kind it is, so Full Disk Access is not implied.
+        XCTAssertEqual(CleanupEngine.classify(CocoaError(.fileWriteNoPermission)), .other)
+        // trashItem is a CoreServices move and may report Carbon OSStatus codes instead of POSIX.
+        func status(_ code: Int) -> NSError {
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError,
+                    userInfo: [NSUnderlyingErrorKey: NSError(domain: NSOSStatusErrorDomain, code: code)])
+        }
+        XCTAssertEqual(CleanupEngine.classify(status(-5000)), .ownership)
+        XCTAssertEqual(CleanupEngine.classify(status(-54)), .ownership)
+        XCTAssertEqual(CleanupEngine.classify(status(-43)), .changed)
+        XCTAssertEqual(CleanupEngine.classify(SafetyError.changedSinceScan), .changed)
+    }
+
+    /// EACCES is Unix ownership or mode. Pointing at Full Disk Access would send the user to
+    /// a setting that cannot help.
+    func testOwnershipErrorDoesNotPointAtFullDiskAccess() throws {
+        try file("Caches/root-owned/data.bin")
+        let item = try candidate("Caches/root-owned")
+        let record = CleanupEngine { _ in
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError,
+                          userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))])
+        }.perform(item)
+        XCTAssertEqual(record.failure, .ownership)
+        XCTAssertFalse(record.error?.contains("Full Disk Access") == true)
+        XCTAssertTrue(record.error?.contains("another user") == true)
+    }
+
+    func testCandidateDeletedAfterScanIsReportedAsChanged() throws {
+        try file("Caches/gone/data.bin")
+        let item = try candidate("Caches/gone")
+        try FileManager.default.removeItem(at: item.url)
+        var moved = false
+        let record = CleanupEngine { _ in moved = true; return nil }.perform(item)
+        XCTAssertFalse(moved)
+        XCTAssertEqual(record.failure, .changed)
+        XCTAssertTrue(record.error?.contains("Scan again") == true)
+    }
+
+    /// A file vanishing *inside* the item while it is re-measured must not be reported as
+    /// the item itself being gone: the folder is still there in Finder.
+    func testVanishedChildIsNotReportedAsAVanishedItem() throws {
+        try file("Caches/busy/data.bin")
+        let item = try candidate("Caches/busy")
+        let inner = CocoaError(.fileReadNoSuchFile)
+        let message = CleanupEngine.explain(inner, as: .changed, item: item.url)
+        XCTAssertTrue(message.hasPrefix("Something inside it changed"))
+        XCTAssertEqual(CleanupEngine.explain(inner, as: .changed, item: home.appendingPathComponent("Caches/absent")),
+                       "It no longer exists where the scan found it. Scan again.")
+    }
+
+    func testIsSameIgnoresTrailingSlashButNotSiblings() {
+        XCTAssertTrue(FileSafety.isSame(URL(fileURLWithPath: "/a/app/"), URL(fileURLWithPath: "/a/app")))
+        XCTAssertTrue(FileSafety.isSame(URL(fileURLWithPath: "/a/x/../app"), URL(fileURLWithPath: "/a/app")))
+        XCTAssertFalse(FileSafety.isSame(URL(fileURLWithPath: "/a/app2"), URL(fileURLWithPath: "/a/app")))
+    }
+
+    /// A protected project is passed to the scanner as an exclusion: none of its build
+    /// output may be nominated and it must not be reported as a project, while a sibling is.
+    func testProtectedProjectIsNotScannedOrListed() throws {
+        try file("projects/app/build.gradle"); try file("projects/app/build/output.bin")
+        try file("projects/web/build.gradle"); try file("projects/web/build/output.bin")
+        let root = home.appendingPathComponent("projects")
+        // Created after the folder exists, so it carries a trailing slash the scanner's URLs may not.
+        let protected = URL(fileURLWithPath: root.appendingPathComponent("app").path + "/")
+        let report = try DiskScanner().scan(configuration: .init(home: home, projectRoots: [root], exclusions: [protected]))
+        XCTAssertEqual(report.candidates.map { $0.url.deletingLastPathComponent().lastPathComponent }, ["web"])
+        XCTAssertEqual(report.projects.map(\.lastPathComponent), ["web"])
+    }
+
+    func testChangedItemIsReportedAsChangedAndNotMoved() throws {
+        try file("Caches/busy/data.bin")
+        let item = try candidate("Caches/busy")
+        try file("Caches/busy/new.bin")
+        var moved = false
+        let record = CleanupEngine { _ in moved = true; return nil }.perform(item)
+        XCTAssertFalse(moved)
+        XCTAssertEqual(record.failure, .changed)
+    }
+
     func testContainmentIsComponentAware() {
         let root = URL(fileURLWithPath: "/Users/test/cache")
         XCTAssertTrue(FileSafety.isInside(root.appendingPathComponent("data"), root: root))

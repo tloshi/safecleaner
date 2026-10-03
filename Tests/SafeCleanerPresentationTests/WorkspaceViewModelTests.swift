@@ -267,8 +267,461 @@ import SafeCleanerCore
         await vm.send(.confirmCleanup)?.value
         XCTAssertFalse(vm.state.isBusy)
         XCTAssertEqual(vm.state.candidates.count, 1)
-        XCTAssertEqual(vm.state.message, "App still running")
+        // A refusal opens the result screen: a banner was easy to miss and read as a dead button.
+        XCTAssertEqual(vm.state.cleanupResult?.title, "Nothing was moved to Trash")
+        XCTAssertEqual(vm.state.cleanupResult?.issues.map(\.detail), ["App still running"])
+        XCTAssertEqual(vm.state.cleanupResult?.subtitle, "1 item left in place")
         XCTAssertFalse(vm.state.showConfirmation)
+        vm.send(.dismissResult)
+        XCTAssertNil(vm.state.cleanupResult)
+    }
+
+    private func owned(_ name: String, by owner: String, bytes: Int64 = 4096) -> Candidate {
+        Candidate(url: URL(fileURLWithPath: "/fixture/\(name)"), title: name, category: .developer, reason: "Fixture",
+            consequence: "Test only", stamp: .init(digest: "fixture", logicalBytes: bytes, allocatedBytes: bytes, fileCount: 1),
+            allowedRoot: URL(fileURLWithPath: "/fixture"), canTrash: true, ownerBundleID: owner)
+    }
+    private func skipped(_ item: Candidate) -> CleanupRecord {
+        CleanupRecord(originalPath: item.id, trashPath: nil, bytes: 0, error: "Skipped because it is open.", failure: .appRunning)
+    }
+    private func cleanAll(_ vm: WorkspaceViewModel) async {
+        vm.send(.toggleSelectAll); vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        await vm.send(.confirmCleanup)?.value
+    }
+
+    func testPermissionFailureExplainsAndOffersFullDiskAccess() async {
+        let denied = fixture("denied"), derived = owned("derived", by: "com.apple.dt.Xcode"), pods = owned("pods", by: "com.apple.dt.Xcode")
+        let (vm, repository) = await ready([denied, derived, pods])
+        repository.appNames = ["com.apple.dt.Xcode": "Xcode"]
+        repository.cleanupResult = .init(records: [
+            CleanupRecord(originalPath: denied.id, trashPath: nil, bytes: 0, error: "Operation not permitted", failure: .permission),
+            skipped(derived), skipped(pods)
+        ], history: [])
+        await cleanAll(vm)
+        let result = vm.state.cleanupResult
+        XCTAssertEqual(result?.title, "Nothing was moved to Trash")
+        XCTAssertEqual(result?.offersFullDiskAccess, true)
+        XCTAssertEqual(result?.issues.map(\.kind), [.permission])
+        XCTAssertTrue(result?.issues.first?.detail.contains("Full Disk Access") == true)
+        XCTAssertEqual(result?.apps.map(\.name), ["Xcode"], "one row per app, not per item")
+        XCTAssertEqual(result?.apps.first?.detail, "2 items · 8 KB")
+        XCTAssertEqual(vm.state.candidates.count, 3, "nothing moved, so nothing leaves the list")
+    }
+
+    /// The reported request: a button per open app that quits it, then a way to put the
+    /// items it kept back into Review — without skipping the review and confirmation.
+    func testQuittingAnAppFromTheResultReleasesOnlyItsItems() async {
+        let derived = owned("derived", by: "com.apple.dt.Xcode"), spotify = owned("spotify", by: "com.spotify.client")
+        let free = fixture("free")
+        let (vm, repository) = await ready([derived, spotify, free])
+        repository.appNames = ["com.apple.dt.Xcode": "Xcode", "com.spotify.client": "Spotify"]
+        let moved = CleanupRecord(originalPath: free.id, trashPath: "/synthetic-trash/free", bytes: free.bytes, error: nil)
+        repository.cleanupResult = .init(records: [skipped(derived), skipped(spotify), moved], history: [moved])
+        await cleanAll(vm)
+        XCTAssertEqual(vm.state.cleanupResult?.title, "1 moved to Trash")
+        XCTAssertEqual(vm.state.cleanupResult?.subtitle, "2 items left in place · 4 KB in Trash · Space returns when you empty it")
+        XCTAssertEqual(vm.state.cleanupResult?.apps.map(\.status), [.open, .open])
+        XCTAssertEqual(vm.state.cleanupResult?.canSelectRemaining, false)
+        XCTAssertNotNil(vm.state.cleanupResult?.selectRemainingHint)
+        XCTAssertNil(vm.send(.selectRemaining))
+
+        repository.quitOutcomes = ["com.apple.dt.Xcode": .quit]
+        let quitting = vm.send(.quitApp("com.apple.dt.Xcode"))
+        XCTAssertEqual(vm.state.cleanupResult?.apps.first { $0.name == "Xcode" }?.status, .quitting)
+        await quitting?.value
+        XCTAssertEqual(repository.quitRequests, ["com.apple.dt.Xcode"])
+        XCTAssertEqual(vm.state.cleanupResult?.apps.first { $0.name == "Xcode" }?.status, .closed)
+        XCTAssertEqual(vm.state.cleanupResult?.selectRemainingLabel, "Select 1 remaining in Review")
+        XCTAssertNil(vm.send(.quitApp("com.apple.dt.Xcode")), "a closed app is not asked again")
+
+        vm.send(.selectRemaining)
+        XCTAssertNil(vm.state.cleanupResult)
+        XCTAssertEqual(vm.state.destination, .review)
+        XCTAssertEqual(vm.state.candidates.filter(\.isSelected).map(\.id), [derived.id], "only the closed app's items")
+        XCTAssertFalse(vm.state.showConfirmation, "it still goes through review and confirmation")
+        XCTAssertEqual(repository.cleanCalls, 1)
+    }
+
+    func testAppThatDoesNotQuitSaysSoAndCanBeAskedAgain() async {
+        let derived = owned("derived", by: "com.apple.dt.Xcode")
+        let (vm, repository) = await ready([derived])
+        repository.cleanupResult = .init(records: [skipped(derived)], history: [])
+        await cleanAll(vm)
+        XCTAssertEqual(vm.state.cleanupResult?.apps.first?.name, "com.apple.dt.Xcode", "falls back to the bundle ID")
+        repository.quitOutcomes = ["com.apple.dt.Xcode": .stillRunning]
+        await vm.send(.quitApp("com.apple.dt.Xcode"))?.value
+        let app = vm.state.cleanupResult?.apps.first
+        XCTAssertEqual(app?.status, .stillOpen)
+        XCTAssertTrue(app?.note?.contains("asking you to save") == true)
+        XCTAssertEqual(app?.canQuit, true)
+        XCTAssertEqual(vm.state.cleanupResult?.canSelectRemaining, false)
+        repository.quitOutcomes = ["com.apple.dt.Xcode": .notRunning]
+        await vm.send(.quitApp("com.apple.dt.Xcode"))?.value
+        XCTAssertEqual(vm.state.cleanupResult?.apps.first?.status, .closed, "already gone counts as closed")
+    }
+
+    func testQuitResultArrivingAfterTheSheetClosedChangesNothing() async {
+        let derived = owned("derived", by: "com.apple.dt.Xcode")
+        let (vm, repository) = await ready([derived])
+        repository.cleanupResult = .init(records: [skipped(derived)], history: [])
+        await cleanAll(vm)
+        repository.quitOutcomes = ["com.apple.dt.Xcode": .quit]
+        let quitting = vm.send(.quitApp("com.apple.dt.Xcode"))
+        vm.send(.dismissResult)
+        await quitting?.value
+        XCTAssertNil(vm.state.cleanupResult)
+    }
+
+    func testPreviewCannotQuitApps() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9",
+                                    previewReport: .init(candidates: [fixture()]))
+        await vm.start()
+        vm.send(.quitApp("com.apple.dt.Xcode"))
+        XCTAssertTrue(repository.quitRequests.isEmpty)
+    }
+
+    /// A long cleanup must end on something unmistakable, not just a spinner that stops.
+    func testSuccessfulCleanupEndsOnAResultWithNothingToFix() async {
+        let candidate = fixture()
+        let (vm, _) = await ready([candidate])
+        vm.send(.toggleCandidate(candidate.id)); vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        await vm.send(.confirmCleanup)?.value
+        let result = vm.state.cleanupResult
+        XCTAssertEqual(result?.title, "All 1 moved to Trash")
+        XCTAssertEqual(result?.subtitle, "4 KB in Trash · Space returns when you empty it")
+        XCTAssertEqual(result?.issues.isEmpty, true)
+        XCTAssertEqual(result?.apps.isEmpty, true)
+        XCTAssertTrue(vm.state.showCleanupSheet)
+        XCTAssertNil(vm.state.cleanupProgress)
+        vm.send(.dismissResult)
+        XCTAssertFalse(vm.state.showCleanupSheet)
+    }
+
+    func testCleanupShowsProgressInTheSameSheetAndCanStopBetweenItems() async {
+        let first = fixture("first", bytes: 1000), second = fixture("second", bytes: 3000)
+        let (vm, repository) = await ready([first, second])
+        repository.delayClean = true
+        vm.send(.toggleSelectAll); vm.send(.openConfirmation)
+        XCTAssertTrue(vm.state.showCleanupSheet)
+        vm.send(.acknowledge(true))
+        let cleanup = vm.send(.confirmCleanup)
+        XCTAssertFalse(vm.state.showConfirmation)
+        XCTAssertTrue(vm.state.showCleanupSheet, "the sheet stays up and turns into the progress view")
+        await Task.yield()
+        let progress = vm.state.cleanupProgress
+        XCTAssertEqual(progress?.countLabel, "0 of 2 items")
+        XCTAssertEqual(progress?.bytesLabel, "Zero KB of 4 KB")
+        XCTAssertEqual(progress?.current, "first")
+        XCTAssertEqual(progress?.canStop, true)
+        XCTAssertEqual(vm.state.busyStatus, "Moving to Trash · 0 of 2")
+
+        vm.send(.stopCleanup)
+        XCTAssertEqual(vm.state.cleanupProgress?.isStopping, true)
+        XCTAssertEqual(vm.state.cleanupProgress?.canStop, false)
+        XCTAssertEqual(vm.state.cleanupProgress?.currentDetail, "Stopping after this item…")
+        XCTAssertNil(vm.send(.stopCleanup), "a second stop is ignored")
+        await cleanup?.value
+        XCTAssertNil(vm.state.cleanupProgress)
+        XCTAssertEqual(vm.state.cleanupResult?.issues.first?.kind, .stopped)
+        XCTAssertTrue(vm.state.cleanupResult?.issues.first?.detail.contains("2 items not attempted") == true)
+        XCTAssertTrue(vm.state.showCleanupSheet)
+    }
+
+    func testStopIsIgnoredWhenNoCleanupIsRunning() async {
+        let (vm, _) = await ready([fixture()])
+        XCTAssertNil(vm.send(.stopCleanup))
+        XCTAssertNil(vm.state.cleanupProgress)
+    }
+
+    /// Key editing is allowed during a cleanup now. Finishing the cleanup must not yank the
+    /// user off Settings, which used to discard nothing and leave a half-typed key behind.
+    func testCleanupDoesNotNavigateAwayFromAnotherScreen() async {
+        let candidate = fixture()
+        let (vm, repository) = await ready([candidate])
+        repository.delayClean = true
+        vm.send(.toggleCandidate(candidate.id)); vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        let cleanup = vm.send(.confirmCleanup)
+        vm.send(.navigate(.settings)); vm.send(.claudeKeyChanged("sk-ant-half"))
+        cleanup?.cancel(); await cleanup?.value
+        XCTAssertEqual(vm.state.destination, .settings)
+        XCTAssertEqual(vm.state.claudeKeyDraft, "sk-ant-half")
+        vm.send(.navigate(.history))
+        XCTAssertTrue(vm.state.claudeKeyDraft.isEmpty, "leaving Settings still discards the draft")
+    }
+
+    func testConfirmationExplainsWhyMoveToTrashIsDisabled() async {
+        let candidate = fixture()
+        let (vm, _) = await ready([candidate])
+        vm.send(.toggleCandidate(candidate.id)); vm.send(.openConfirmation)
+        XCTAssertNotNil(vm.state.confirmationHint)
+        vm.send(.acknowledge(true))
+        XCTAssertNil(vm.state.confirmationHint)
+    }
+
+    func testSelectAllSelectsEveryCleanableItemAndTogglesOff() async {
+        let first = fixture("first"), second = fixture("second"), locked = fixture("locked", cleanable: false)
+        let (vm, _) = await ready([first, second, locked])
+        XCTAssertEqual(vm.state.selectAll, .none)
+        XCTAssertEqual(vm.state.selectAllLabel, "Select all (2)")
+        vm.send(.toggleSelectAll)
+        XCTAssertEqual(vm.state.selectAll, .all)
+        XCTAssertEqual(Set(vm.state.candidates.filter(\.isSelected).map(\.id)), [first.id, second.id],
+                       "scan-only items are never selected")
+        XCTAssertEqual(vm.state.selectedValue, 8192)
+        vm.send(.toggleSelectAll)
+        XCTAssertEqual(vm.state.selectAll, .none)
+        XCTAssertFalse(vm.state.canReviewSelection)
+    }
+
+    func testSelectAllActsOnlyOnTheFilteredRows() async {
+        let first = fixture("first"), second = fixture("second")
+        let (vm, _) = await ready([first, second])
+        vm.send(.queryChanged("second"))
+        XCTAssertEqual(vm.state.selectAllLabel, "Select all shown (1)")
+        vm.send(.toggleSelectAll)
+        vm.send(.queryChanged(""))
+        XCTAssertEqual(vm.state.selectAll, .some)
+        XCTAssertEqual(vm.state.candidates.filter(\.isSelected).map(\.id), [second.id])
+        vm.send(.toggleSelectAll)
+        XCTAssertEqual(vm.state.selectAll, .all, "a partial selection completes rather than clears")
+    }
+
+    func testSelectAllIsUnavailableWhileBusyOrInPreview() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9",
+                                    previewReport: .init(candidates: [fixture()]))
+        await vm.start()
+        XCTAssertFalse(vm.state.canSelectAll)
+        vm.send(.toggleSelectAll)
+        XCTAssertEqual(vm.state.selectAll, .none)
+
+        // Busy: a rescan clears the list, but a cleanup keeps it on screen.
+        let candidate = fixture()
+        let (busy, fake) = await ready([candidate, fixture("other")])
+        fake.delayClean = true
+        busy.send(.toggleCandidate(candidate.id)); busy.send(.openConfirmation); busy.send(.acknowledge(true))
+        let cleanup = busy.send(.confirmCleanup)
+        XCTAssertTrue(busy.state.isCleaning)
+        XCTAssertFalse(busy.state.canSelectAll)
+        XCTAssertNil(busy.send(.toggleSelectAll))
+        XCTAssertEqual(busy.state.selectAll, .some, "selection unchanged while busy")
+        cleanup?.cancel(); await cleanup?.value
+    }
+
+    /// The reported bug: the key field was disabled for the whole length of a scan, with
+    /// nothing on the Settings screen saying why.
+    func testClaudeKeyCanBeSavedDuringAScanAndStopStillCancelsTheScan() async {
+        let repository = FakeRepository()
+        repository.delayScan = true
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        let scan = vm.send(.scan)
+        XCTAssertTrue(vm.state.isScanning)
+        XCTAssertFalse(vm.state.canEditSettings)
+        XCTAssertTrue(vm.state.canEditClaudeKey)
+        XCTAssertEqual(vm.state.busyStatus?.hasPrefix("Scanning"), true)
+
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key"))
+        XCTAssertTrue(vm.state.canSaveClaudeKey)
+        await vm.send(.saveClaudeKey)?.value
+        XCTAssertTrue(vm.state.hasClaudeKey)
+        XCTAssertTrue(vm.state.isScanning, "saving a key must not end or replace the scan")
+
+        vm.send(.cancelScan); await scan?.value
+        XCTAssertFalse(vm.state.isScanning)
+        XCTAssertTrue(vm.state.message?.contains("cancelled") == true, "Stop still reaches the scan")
+        XCTAssertNil(vm.state.busyStatus)
+    }
+
+    func testKeyFieldLocksOnlyWhileSavingAnalyzingOrInPreview() async {
+        let (vm, repository) = await ready([fixture()])
+        XCTAssertTrue(vm.state.canEditClaudeKey)
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); await vm.send(.saveClaudeKey)?.value
+        repository.delayAI = true
+        let analysis = vm.send(.analyzeWithClaude)
+        XCTAssertFalse(vm.state.canEditClaudeKey)
+        XCTAssertNil(vm.send(.claudeKeyChanged("sk-ant-other-synthetic-key")))
+        vm.send(.cancelClaude); await analysis?.value
+        XCTAssertTrue(vm.state.canEditClaudeKey)
+
+        let preview = WorkspaceViewModel(repository: FakeRepository(), homePath: "/fixture", version: "9.9.9",
+                                         previewReport: .init(candidates: [fixture()]))
+        await preview.start()
+        XCTAssertFalse(preview.state.canEditClaudeKey)
+    }
+
+    private func build(_ project: String) -> Candidate {
+        Candidate(url: URL(fileURLWithPath: "/fixture/\(project)/build"), title: "\(project) / build", category: .projects,
+            reason: "Build output", consequence: "Slower next build",
+            stamp: .init(digest: "fixture", logicalBytes: 4096, allocatedBytes: 4096, fileCount: 1),
+            allowedRoot: URL(fileURLWithPath: "/fixture"), canTrash: true, ownerBundleID: nil)
+    }
+
+    func testProtectingAProjectRemovesItsItemsAndKeepsTheOthers() async {
+        let app = build("app"), web = build("web")
+        let repository = FakeRepository()
+        repository.settings.projectRoots = [URL(fileURLWithPath: "/fixture")]
+        repository.report = ScanReport(candidates: [app, web],
+            projects: [URL(fileURLWithPath: "/fixture/app"), URL(fileURLWithPath: "/fixture/web")])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        XCTAssertEqual(vm.state.projects.map(\.title), ["app", "web"])
+        XCTAssertEqual(vm.state.projects.first?.detail, "1 build folder · 4 KB")
+        vm.send(.toggleSelectAll)
+
+        vm.send(.setProjectProtection("/fixture/app", true))
+        XCTAssertEqual(repository.protected, [URL(fileURLWithPath: "/fixture/app")])
+        XCTAssertEqual(vm.state.candidates.map(\.id), [web.id])
+        XCTAssertEqual(vm.state.selectedValue, 4096, "the protected project's item is no longer selected")
+        XCTAssertEqual(vm.state.projects.first { $0.title == "app" }?.isProtected, true)
+        XCTAssertEqual(vm.state.projects.first { $0.title == "web" }?.isProtected, false)
+
+        // A protected project is not scanned, so it must stay listed to be switched back on.
+        repository.report = ScanReport(candidates: [web], projects: [URL(fileURLWithPath: "/fixture/web")])
+        await vm.send(.scan)?.value
+        XCTAssertEqual(vm.state.projects.map(\.title), ["app", "web"])
+        vm.send(.setProjectProtection("/fixture/app", false))
+        XCTAssertTrue(repository.protected.isEmpty)
+        XCTAssertTrue(vm.state.message?.contains("Scan again") == true)
+        // The scan skipped it, so without care the row would vanish with its switch.
+        let row = vm.state.projects.first { $0.title == "app" }
+        XCTAssertEqual(row?.isProtected, false)
+        XCTAssertEqual(row?.detail, "Not scanned yet · Scan again to include its build folders")
+        vm.send(.setProjectProtection("/fixture/app", true))
+        XCTAssertEqual(repository.protected, [URL(fileURLWithPath: "/fixture/app")], "it can be switched back on")
+        vm.send(.setProjectProtection("/fixture/app", false))
+        repository.report = ScanReport(candidates: [app, web],
+            projects: [URL(fileURLWithPath: "/fixture/app"), URL(fileURLWithPath: "/fixture/web")])
+        await vm.send(.scan)?.value
+        XCTAssertEqual(vm.state.projects.first { $0.title == "app" }?.detail, "1 build folder · 4 KB")
+    }
+
+    func testRemovingARootDropsOnlyProjectsNoRemainingRootCovers() async {
+        let repository = FakeRepository()
+        let solo = URL(fileURLWithPath: "/fixture/solo"), shared = URL(fileURLWithPath: "/fixture/all")
+        repository.settings.projectRoots = [solo, shared]
+        repository.report = ScanReport(projects: [solo, URL(fileURLWithPath: "/fixture/all/web")])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        XCTAssertEqual(vm.state.projects.map(\.title), ["solo", "web"])
+        vm.send(.removeProjectFolder(solo.path))
+        XCTAssertEqual(vm.state.projects.map(\.title), ["web"], "a root that is itself a project leaves with its root")
+    }
+
+    func testProjectsWithTheSameNameShowTheirParent() async {
+        let repository = FakeRepository()
+        repository.report = ScanReport(projects: [URL(fileURLWithPath: "/fixture/clientB/app"),
+                                                  URL(fileURLWithPath: "/fixture/clientA/app"),
+                                                  URL(fileURLWithPath: "/fixture/web")])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        XCTAssertEqual(vm.state.projects.map(\.title), ["clientA / app", "clientB / app", "web"])
+    }
+
+    func testProjectsEmptyMessageFollowsTheSituation() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        XCTAssertEqual(vm.state.projectsEmptyMessage, "Add a project folder above, then scan.")
+        repository.settings.projectRoots = [URL(fileURLWithPath: "/fixture")]
+        let other = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await other.start()
+        XCTAssertEqual(other.state.projectsEmptyMessage, "Scan to list the projects in your folders.")
+        await other.send(.scan)?.value
+        XCTAssertTrue(other.state.projectsEmptyMessage?.hasPrefix("No projects found") == true)
+    }
+
+    func testProtectionFailureChangesNothing() async {
+        let app = build("app")
+        let repository = FakeRepository()
+        repository.settings.projectRoots = [URL(fileURLWithPath: "/fixture")]
+        repository.report = ScanReport(candidates: [app], projects: [URL(fileURLWithPath: "/fixture/app")])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        vm.send(.toggleCandidate(app.id))
+        repository.settingsError = SafetyError.refused("Storage unavailable")
+        vm.send(.setProjectProtection("/fixture/app", true))
+        XCTAssertEqual(vm.state.candidates.count, 1)
+        XCTAssertTrue(vm.state.candidates[0].isSelected)
+        XCTAssertEqual(vm.state.message, "Storage unavailable")
+
+        repository.settingsError = nil
+        let writes = repository.settingsWrites
+        // Inside the root, so the repository would accept it: only the "listed" guard stops it.
+        vm.send(.setProjectProtection("/fixture/unlisted", true))
+        XCTAssertEqual(repository.settingsWrites, writes, "only listed projects can be protected")
+        XCTAssertTrue(repository.protected.isEmpty)
+
+        // Protected rows stay listed during a scan, so only the busy lock can stop this one.
+        vm.send(.setProjectProtection("/fixture/app", true))
+        XCTAssertEqual(repository.protected.count, 1)
+        let protectedWrites = repository.settingsWrites
+        repository.delayScan = true
+        let scan = vm.send(.scan)
+        XCTAssertTrue(vm.state.projects.contains { $0.id == "/fixture/app" })
+        vm.send(.setProjectProtection("/fixture/app", false))
+        XCTAssertEqual(repository.settingsWrites, protectedWrites, "protection is locked while a scan runs")
+        XCTAssertEqual(repository.protected.count, 1)
+        vm.send(.cancelScan); await scan?.value
+    }
+
+    func testUnprotectingAProjectNoRootCoversDropsItsRow() async {
+        let repository = FakeRepository()
+        repository.settings.protectedProjects = [URL(fileURLWithPath: "/elsewhere/app")]
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        vm.send(.setProjectProtection("/elsewhere/app", false))
+        XCTAssertTrue(vm.state.projects.isEmpty, "no scan reaches it, so no switch is promised")
+        XCTAssertTrue(vm.state.message?.contains("outside your project folders") == true)
+    }
+
+    func testRemovingAnOverlappingRootMarksProjectsThatLostItemsForRescan() async {
+        let repository = FakeRepository()
+        let code = URL(fileURLWithPath: "/fixture/Code"), client = URL(fileURLWithPath: "/fixture/Code/clientA")
+        repository.settings.projectRoots = [code, client]
+        let build = Candidate(url: URL(fileURLWithPath: "/fixture/Code/clientA/app/build"), title: "app / build", category: .projects,
+            reason: "Build output", consequence: "Slower next build",
+            stamp: .init(digest: "fixture", logicalBytes: 4096, allocatedBytes: 4096, fileCount: 1),
+            allowedRoot: code, canTrash: true, ownerBundleID: nil)
+        repository.report = ScanReport(candidates: [build], projects: [URL(fileURLWithPath: "/fixture/Code/clientA/app")])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        vm.send(.removeProjectFolder(code.path))
+        XCTAssertTrue(vm.state.candidates.isEmpty)
+        XCTAssertEqual(vm.state.projects.first?.detail, "Not scanned yet · Scan again to include its build folders",
+                       "not \"No build folders found\", which a rescan would contradict")
+    }
+
+    func testNewlyAddedRootIsNotDescribedAsHavingNoProjects() async {
+        let repository = FakeRepository()
+        repository.settings.projectRoots = [URL(fileURLWithPath: "/fixture/a")]
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        XCTAssertTrue(vm.state.projectsEmptyMessage?.hasPrefix("No projects found") == true)
+        repository.settings.projectRoots.append(URL(fileURLWithPath: "/fixture/b"))
+        await vm.send(.addProjectFolder)?.value
+        XCTAssertEqual(vm.state.projectsEmptyMessage, "Scan to list the projects in your folders.")
+    }
+
+    func testSameNamedProjectsWithSameParentFallBackToTheirPath() async {
+        let repository = FakeRepository()
+        repository.report = ScanReport(projects: [URL(fileURLWithPath: "/fixture/2024/acme/web"),
+                                                  URL(fileURLWithPath: "/fixture/2025/acme/web")])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start(); await vm.send(.scan)?.value
+        XCTAssertEqual(vm.state.projects.map(\.title), ["~/2024/acme/web", "~/2025/acme/web"])
+    }
+
+    func testPreviewCannotChangeProjectProtection() async {
+        let repository = FakeRepository()
+        repository.settings.protectedProjects = [URL(fileURLWithPath: "/fixture/project")]
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9",
+                                    previewReport: .init(candidates: [fixture()]))
+        await vm.start()
+        XCTAssertEqual(vm.state.projects.map(\.id), ["/fixture/project"], "listed, so only the preview guard can stop it")
+        vm.send(.setProjectProtection("/fixture/project", false))
+        XCTAssertEqual(repository.settingsWrites, 0)
     }
 
     func testPartialCleanupOnlyRemovesSuccessfulItems() async {
@@ -282,7 +735,40 @@ import SafeCleanerCore
         XCTAssertEqual(vm.state.candidates.map(\.id), [second.id])
         XCTAssertEqual(vm.state.history.count, 2)
         XCTAssertFalse(vm.state.canReviewSelection)
-        XCTAssertTrue(vm.state.message?.contains("1 failed") == true)
+        XCTAssertEqual(vm.state.cleanupResult?.title, "1 moved to Trash")
+        XCTAssertEqual(vm.state.cleanupResult?.subtitle.hasPrefix("1 item left in place"), true)
+        XCTAssertEqual(vm.state.message, "1 item moved to Trash. Space is not reclaimed until Trash is emptied.",
+                       "the banner reports what moved; the dialog alone explains what did not")
+    }
+
+    func testStoppedCleanupCountsItemsThatWereNeverAttempted() async {
+        let items = ["a", "b", "c"].map { fixture($0) }
+        let (vm, repository) = await ready(items)
+        let moved = CleanupRecord(originalPath: items[0].id, trashPath: "/synthetic-trash/a", bytes: 1, error: nil)
+        repository.cleanupResult = .init(records: [moved], history: [moved], stoppedReason: "Cleanup stopped between items.")
+        vm.send(.toggleSelectAll); vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        await vm.send(.confirmCleanup)?.value
+        XCTAssertEqual(vm.state.cleanupResult?.title, "1 moved to Trash")
+        XCTAssertEqual(vm.state.cleanupResult?.subtitle.hasPrefix("2 items left in place"), true)
+        XCTAssertEqual(vm.state.cleanupResult?.issues.map(\.detail), ["Cleanup stopped between items. 2 items not attempted."])
+    }
+
+    func testChangedAndOwnershipFailuresDoNotOfferFullDiskAccess() async {
+        let first = fixture("first"), second = fixture("second"), third = fixture("third")
+        let (vm, repository) = await ready([first, second, third])
+        repository.cleanupResult = .init(records: [
+            CleanupRecord(originalPath: first.id, trashPath: nil, bytes: 0, error: "Changed", failure: .changed),
+            CleanupRecord(originalPath: second.id, trashPath: nil, bytes: 0, error: "Root-owned", failure: .ownership),
+            CleanupRecord(originalPath: third.id, trashPath: nil, bytes: 0, error: "Disk full")
+        ], history: [])
+        vm.send(.toggleSelectAll); vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        await vm.send(.confirmCleanup)?.value
+        let result = vm.state.cleanupResult
+        XCTAssertEqual(result?.offersFullDiskAccess, false)
+        XCTAssertEqual(result?.issues.map(\.title), ["1 item owned by another user", "1 item changed after the scan", "1 item could not move"])
+        XCTAssertEqual(result?.issues.first { $0.kind == .changed }?.detail, "It was left in place. Scan again to measure it fresh.")
+        XCTAssertEqual(result?.issues.first { $0.kind == .other }?.detail, "Disk full", "a nil failure kind is reported, not dropped")
+        XCTAssertNil(vm.state.message, "nothing moved, so there is no success banner")
     }
 
     func testPreviewCannotReachMutatingOrDesktopRepositoryMethods() async {
@@ -293,7 +779,8 @@ import SafeCleanerCore
         await vm.start()
         let actions: [WorkspaceAction] = [.scan, .toggleCandidate(candidate.id), .openConfirmation, .acknowledge(true), .confirmCleanup,
             .excludeCandidate(candidate.id), .revealCandidate(candidate.id), .addProjectFolder,
-            .removeProjectFolder("/fixture/project"), .removeExclusion("/fixture/keep")]
+            .removeProjectFolder("/fixture/project"), .removeExclusion("/fixture/keep"),
+            .toggleSelectAll, .setProjectProtection("/fixture/project", true)]
         for action in actions { vm.send(action) }
         XCTAssertTrue(vm.state.isPreview)
         XCTAssertFalse(vm.state.canConfirmCleanup)
@@ -327,7 +814,14 @@ import SafeCleanerCore
     var historyAvailable = true
     var scanError: Error?, settingsError: Error?, cleanupError: Error?, resetError: Error?
     var cleanupResult: CleanupBatchResult?
-    var delayScan = false
+    var delayScan = false, delayClean = false
+    var appNames: [String: String] = [:]
+    var quitOutcomes: [String: AppQuitOutcome] = [:]
+    var quitRequests: [String] = []
+    func applicationNames(for bundleIDs: [String]) -> [String: String] { appNames.filter { bundleIDs.contains($0.key) } }
+    func quitApplication(_ bundleID: String) async -> AppQuitOutcome {
+        quitRequests.append(bundleID); return quitOutcomes[bundleID] ?? .stillRunning
+    }
     var progress: (@Sendable (String) -> Void)?
     func load() async -> WorkspaceSnapshot {
         loads += 1
@@ -341,20 +835,42 @@ import SafeCleanerCore
     }
     func diskCapacity() async throws -> DiskCapacity { .init(total: 100, free: 20) }
     func addProjectFolders() async throws -> WorkspaceSettings { settingsWrites += 1; return settings }
-    func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings { settingsWrites += 1; return settings }
+    func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings {
+        settingsWrites += 1; settings.projectRoots.removeAll { $0 == url }; return settings
+    }
     func exclude(_ url: URL) throws -> WorkspaceSettings {
         if let settingsError { throw settingsError }
         settingsWrites += 1; settings.exclusions.append(url); return settings
     }
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings { settingsWrites += 1; return settings }
+    var protected: [URL] { settings.protectedProjects }
+    func setProjectProtection(_ url: URL, protected: Bool) throws -> WorkspaceSettings {
+        if let settingsError { throw settingsError }
+        // Same containment rule as LocalCleaningRepository, so a test cannot pass by
+        // protecting something the real repository would refuse.
+        if protected, !settings.projectRoots.contains(where: { FileSafety.isSame(url, $0) || FileSafety.isInside(url, root: $0) }) {
+            throw SafetyError.refused("Choose a project inside one of your project folders.")
+        }
+        settingsWrites += 1
+        if protected { settings.protectedProjects.append(url) } else { settings.protectedProjects.removeAll { $0 == url } }
+        return settings
+    }
     func resetHistory() async throws -> [CleanupRecord] {
         resetCalls += 1
         if let resetError { throw resetError }
         return []
     }
-    func clean(_ items: [Candidate]) async throws -> CleanupBatchResult {
+    func clean(_ items: [Candidate], progress: @escaping @MainActor (CleanupProgress) -> Void) async throws -> CleanupBatchResult {
         cleanCalls += 1; cleanedIDs = items.map(\.id)
         if let cleanupError { throw cleanupError }
+        let total = items.reduce(Int64(0)) { $0 + $1.bytes }
+        progress(CleanupProgress(completed: 0, total: items.count, bytesCompleted: 0, bytesTotal: total,
+                                 current: items.first?.title, currentBytes: items.first?.bytes ?? 0))
+        if delayClean {
+            // Like the real repository: a stop lands between items and is reported, not thrown.
+            do { try await Task.sleep(nanoseconds: 60_000_000_000) }
+            catch { return .init(records: [], history: [], stoppedReason: "Cleanup stopped between items.") }
+        }
         if let cleanupResult { return cleanupResult }
         let records = items.map { CleanupRecord(originalPath: $0.id, trashPath: "/synthetic-trash/item", bytes: $0.bytes, error: nil) }
         return .init(records: records, history: records)

@@ -86,11 +86,11 @@ struct ClaudeSettingsCard: View {
                 Text(state.hasClaudeKey ? "API key saved in macOS Keychain" : "No API key saved").font(.system(size: 12))
                 SecureField("Anthropic API key (sk-ant-…)", text: Binding(
                     get: { state.claudeKeyDraft }, set: { send(.claudeKeyChanged($0)) }))
-                    .textFieldStyle(.roundedBorder).disabled(!state.canEditSettings)
+                    .textFieldStyle(.roundedBorder).disabled(!state.canEditClaudeKey)
                 HStack {
                     Button("Save to Keychain") { send(.saveClaudeKey) }.disabled(!state.canSaveClaudeKey)
                     if state.hasClaudeKey {
-                        Button("Remove saved key") { send(.removeClaudeKey) }.disabled(!state.canEditSettings)
+                        Button("Remove saved key") { send(.removeClaudeKey) }.disabled(!state.canEditClaudeKey)
                     }
                     Spacer()
                     Button("Open Claude review") { send(.navigate(.assistant)) }

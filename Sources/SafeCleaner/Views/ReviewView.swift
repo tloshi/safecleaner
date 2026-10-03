@@ -55,6 +55,7 @@ struct ReviewView: View {
                     Spacer()
                 }
             } else {
+                SelectAllRow(state: state, send: send).padding(.horizontal, 32).padding(.bottom, 10)
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(state.candidates) { item in CandidateRow(state: item, send: send) }
@@ -78,6 +79,35 @@ struct ReviewView: View {
             }.padding(.horizontal, 32).padding(.vertical, 20).background(Palette.sidebar)
                 .overlay(alignment: .top) { Rectangle().fill(Palette.line).frame(height: 1) }
         }
+    }
+}
+
+private struct SelectAllRow: View {
+    let state: WorkspaceViewState
+    let send: (WorkspaceAction) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var symbol: String {
+        switch state.selectAll {
+        case .all: return "checkmark.square.fill"
+        case .some: return "minus.square.fill"
+        case .none: return "square"
+        }
+    }
+    var body: some View {
+        HStack(spacing: 14) {
+            Button { send(.toggleSelectAll) } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: symbol).font(.system(size: 21))
+                        .foregroundStyle(state.selectAll == .none ? Palette.muted.opacity(0.45) : Palette.mint)
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                    Text(state.selectAllLabel).font(.system(size: 12, weight: .medium))
+                }.contentShape(Rectangle())
+            }.buttonStyle(.plain).disabled(!state.canSelectAll)
+                .accessibilityLabel(state.selectAll == .all ? "Deselect all shown items" : "Select all shown items")
+                .accessibilityValue(state.selectAllAccessibilityValue)
+            Spacer()
+            Text("Scan-only items are never selected").font(.system(size: 11)).foregroundStyle(Palette.muted)
+        }.padding(.horizontal, 18)
     }
 }
 
@@ -160,11 +190,14 @@ struct ConfirmationView: View {
             Toggle("I’ve reviewed these items, closed related apps and stopped builds or installs.",
                 isOn: Binding(get: { state.confirmationAcknowledged }, set: { send(.acknowledge($0)) }))
                 .toggleStyle(.checkbox).font(.system(size: 12))
-            Text("Changed items are skipped. Moving to Trash does not immediately free disk space. No permanent deletion is performed.")
+            Text("Items that changed since the scan, and items SafeCleaner can tie to an app that is still open, are left in place and listed afterwards. Other items move even if a related app is open, so close it first. Moving to Trash does not immediately free disk space. No permanent deletion is performed.")
                 .font(.system(size: 11)).foregroundStyle(Palette.muted)
             HStack {
                 Button("Cancel") { send(.dismissConfirmation) }.keyboardShortcut(.cancelAction)
                 Spacer()
+                if let hint = state.confirmationHint {
+                    Text(hint).font(.system(size: 11)).foregroundStyle(.orange)
+                }
                 Button("Move to Trash") { send(.confirmCleanup) }.buttonStyle(PrimaryButton()).disabled(!state.canConfirmCleanup)
             }
         }.padding(30).frame(width: 560).background(Palette.sidebar)

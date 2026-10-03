@@ -99,11 +99,11 @@ import Foundation
         let path = url.standardized
         if protected {
             try validator.validate(path)
-            guard settings.projectRoots.contains(where: { path == $0.standardized || FileSafety.isInside(path, root: $0) }) else {
+            guard settings.projectRoots.contains(where: { FileSafety.isSame(path, $0) || FileSafety.isInside(path, root: $0) }) else {
                 throw SafetyError.refused("Choose a project inside one of your project folders.")
             }
-            if !updated.protectedProjects.contains(path) { updated.protectedProjects.append(path) }
-        } else { updated.protectedProjects.removeAll { $0.standardized == path } }
+            if !updated.protectedProjects.contains(where: { FileSafety.isSame($0, path) }) { updated.protectedProjects.append(path) }
+        } else { updated.protectedProjects.removeAll { FileSafety.isSame($0, path) } }
         return try persist(updated)
     }
     private func persist(_ updated: WorkspaceSettings) throws -> WorkspaceSettings {
@@ -112,7 +112,7 @@ import Foundation
         return settings
     }
 
-    public func clean(_ items: [Candidate]) async throws -> CleanupBatchResult {
+    public func clean(_ items: [Candidate], progress: @escaping @MainActor (CleanupProgress) -> Void = { _ in }) async throws -> CleanupBatchResult {
         guard !cleaning, historyAvailable else {
             throw SafetyError.refused("Cleanup unavailable. Wait for the current operation or resolve the activity-history error.")
         }
@@ -122,14 +122,9 @@ import Foundation
         guard Set(items.map(\.id)).count == items.count else {
             throw SafetyError.refused("Duplicate cleanup candidates were refused.")
         }
-        let running = desktop.runningApplicationIDs()
-        let blocked = items.filter { $0.ownerBundleID.map(running.contains) ?? false }
-        guard blocked.isEmpty else {
-            throw SafetyError.refused("Close the related apps first: " + blocked.map(\.title).joined(separator: ", "))
-        }
         for item in items {
             guard !(settings.exclusions + settings.protectedProjects).contains(where: {
-                $0.standardized == item.url.standardized || FileSafety.isInside(item.url, root: $0) || FileSafety.isInside($0, root: item.url)
+                FileSafety.isSame($0, item.url) || FileSafety.isInside(item.url, root: $0) || FileSafety.isInside($0, root: item.url)
             }) else { throw SafetyError.refused("An item contains or belongs to an excluded location. Scan again.") }
         }
         cleaning = true
@@ -137,12 +132,27 @@ import Foundation
         // Refuse to start if we cannot persist activity. Never overwrite unreadable history.
         try await historyStore.save(history)
         var completed: [CleanupRecord] = []
+        let bytesTotal = items.reduce(Int64(0)) { $0 + $1.bytes }
+        var bytesDone: Int64 = 0
+        // An item whose app is open is left exactly where it is and reported, rather than
+        // refusing the whole batch. Refusing everything made "select all" useless on a
+        // developer's Mac, where Xcode, Android Studio or a browser is nearly always open.
+        // Checked per item, immediately before it would move, not once up front.
         for item in items {
             if Task.isCancelled {
                 return CleanupBatchResult(records: completed, history: history, stoppedReason: "Cleanup stopped between items.")
             }
-            let record = await cleaner.moveToTrash(item)
-            completed.append(record); history.insert(record, at: 0)
+            progress(CleanupProgress(completed: completed.count, total: items.count, bytesCompleted: bytesDone,
+                                     bytesTotal: bytesTotal, current: item.title, currentBytes: item.bytes))
+            let record: CleanupRecord
+            if let owner = item.ownerBundleID, desktop.runningApplicationIDs().contains(owner) {
+                let name = desktop.applicationName(for: owner) ?? owner
+                record = CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
+                    error: "Skipped because \(name) is open. Quit \(name), then scan again.", failure: .appRunning)
+            } else {
+                record = await cleaner.moveToTrash(item)
+            }
+            completed.append(record); history.insert(record, at: 0); bytesDone += item.bytes
             do { try await historyStore.save(history) }
             catch {
                 historyAvailable = false
@@ -150,6 +160,8 @@ import Foundation
                     stoppedReason: "Cleanup stopped: activity could not be saved. The latest result is visible for this session. \(error.localizedDescription)")
             }
         }
+        progress(CleanupProgress(completed: completed.count, total: items.count, bytesCompleted: bytesDone,
+                                 bytesTotal: bytesTotal, current: nil, currentBytes: 0))
         return CleanupBatchResult(records: completed, history: history)
     }
     /// Discarding the history is destructive to the activity log, so it stays an explicit
@@ -164,6 +176,15 @@ import Foundation
         history = []
         historyAvailable = true
         return history
+    }
+
+    public func applicationNames(for bundleIDs: [String]) -> [String: String] {
+        Dictionary(bundleIDs.compactMap { id in desktop.applicationName(for: id).map { (id, $0) } }, uniquingKeysWith: { first, _ in first })
+    }
+    public func quitApplication(_ bundleID: String) async -> AppQuitOutcome {
+        // Quitting mid-cleanup would race the per-item "is its app open" check.
+        guard !cleaning else { return .stillRunning }
+        return await desktop.quitApplication(bundleID)
     }
 
     public func reveal(_ url: URL) { desktop.reveal(url) }

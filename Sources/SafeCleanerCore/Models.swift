@@ -83,6 +83,28 @@ public struct ScanReport: Sendable {
     }
 }
 
+/// Why an item did not move. The prose in `CleanupRecord.error` is for the Activity list;
+/// this is what lets the app say *what to do about it* instead of "N failed".
+public enum CleanupFailure: String, Codable, Sendable {
+    /// macOS refused the operation (EPERM). Often privacy protection, which Full Disk
+    /// Access fixes; locked or system-protected files stay refused regardless.
+    case permission
+    /// Unix permissions refused it (EACCES): owned by another user or read-only, typically
+    /// left by an install run with sudo. Full Disk Access does not change this.
+    case ownership
+    /// The owning app is open, so the item was left untouched.
+    case appRunning
+    /// The item no longer matches what the scan measured.
+    case changed
+    case other
+
+    /// An unknown value from a newer build must not make the whole history unreadable,
+    /// because an unreadable history pauses cleanup.
+    public init(from decoder: Decoder) throws {
+        self = CleanupFailure(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .other
+    }
+}
+
 public struct CleanupRecord: Identifiable, Codable, Sendable {
     public let id: UUID
     public let date: Date
@@ -90,16 +112,24 @@ public struct CleanupRecord: Identifiable, Codable, Sendable {
     public let trashPath: String?
     public let bytes: Int64
     public let error: String?
-    public init(originalPath: String, trashPath: String?, bytes: Int64, error: String?) {
+    /// Optional so histories written before this field existed still decode without a schema bump.
+    public let failure: CleanupFailure?
+    public init(originalPath: String, trashPath: String?, bytes: Int64, error: String?, failure: CleanupFailure? = nil) {
         id = UUID(); date = Date(); self.originalPath = originalPath
         self.trashPath = trashPath; self.bytes = bytes; self.error = error
+        self.failure = error == nil ? nil : (failure ?? .other)
     }
 }
 
 public enum SafetyError: LocalizedError {
     case refused(String)
+    /// An item that no longer matches its scan. Distinct so it is not reported as a refusal.
+    case changedSinceScan
     public var errorDescription: String? {
-        switch self { case .refused(let message): return message }
+        switch self {
+        case .refused(let message): return message
+        case .changedSinceScan: return "The item changed since scanning. Scan again before cleaning."
+        }
     }
 }
 

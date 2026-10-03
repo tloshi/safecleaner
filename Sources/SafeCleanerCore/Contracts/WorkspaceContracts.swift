@@ -40,6 +40,26 @@ public struct CleanupBatchResult: Sendable {
     }
 }
 
+/// Where a cleanup is. Reported before each item, because re-measuring a large item to
+/// prove it did not change is the slow part, and a bare spinner gives no sense of the end.
+public struct CleanupProgress: Sendable, Equatable {
+    public let completed: Int
+    public let total: Int
+    public let bytesCompleted: Int64
+    public let bytesTotal: Int64
+    /// The item being checked and moved now; nil once every item has been attempted.
+    public let current: String?
+    public let currentBytes: Int64
+    public init(completed: Int, total: Int, bytesCompleted: Int64, bytesTotal: Int64, current: String?, currentBytes: Int64) {
+        self.completed = completed; self.total = total; self.bytesCompleted = bytesCompleted
+        self.bytesTotal = bytesTotal; self.current = current; self.currentBytes = currentBytes
+    }
+}
+
+/// What happened after asking an app to quit. Only a normal quit is ever requested: the app
+/// may show its own "save changes?" prompt, which is why `stillRunning` is an ordinary answer.
+public enum AppQuitOutcome: Sendable, Equatable { case quit, stillRunning, notRunning }
+
 // Ports describe capabilities. Implementations live in the app's Services folder.
 public protocol ScanServicing: Sendable {
     func scan(configuration: ScanConfiguration, progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport
@@ -61,6 +81,10 @@ public protocol HistoryStoring: Sendable {
 @MainActor public protocol DesktopInteracting {
     func chooseProjectFolders() async -> [URL]
     func runningApplicationIDs() -> Set<String>
+    /// The name a person recognises, for "close Xcode first". Nil falls back to the ID.
+    func applicationName(for bundleID: String) -> String?
+    /// Ask a running app to quit normally and report whether it closed. Never force-quits.
+    func quitApplication(_ bundleID: String) async -> AppQuitOutcome
     /// Opens the Full Disk Access pane. macOS offers no API to request that permission,
     /// so sending the user to the right pane is the most an app is permitted to do.
     func openFullDiskAccessSettings()
@@ -83,12 +107,19 @@ public protocol ProjectRootValidating: Sendable {
     func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings
     func exclude(_ url: URL) throws -> WorkspaceSettings
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings
-    func clean(_ items: [Candidate]) async throws -> CleanupBatchResult
+    func clean(_ items: [Candidate], progress: @escaping @MainActor (CleanupProgress) -> Void) async throws -> CleanupBatchResult
     /// Discard the stored activity history and start a new one. The recovery path for a
     /// history file this build cannot read, which otherwise pauses cleanup permanently.
     func resetHistory() async throws -> [CleanupRecord]
     func reveal(_ url: URL)
     func openFullDiskAccessSettings()
+    func applicationNames(for bundleIDs: [String]) -> [String: String]
+    func quitApplication(_ bundleID: String) async -> AppQuitOutcome
+}
+
+extension DesktopInteracting {
+    public func applicationName(for bundleID: String) -> String? { nil }
+    public func quitApplication(_ bundleID: String) async -> AppQuitOutcome { .stillRunning }
 }
 
 // Optional capability so inert previews and offline repositories never construct a client.
@@ -97,6 +128,8 @@ extension CleaningRepository {
         throw SafetyError.refused("Project protection is unavailable in this workspace.")
     }
     public func hasClaudeKey() throws -> Bool { false }
+    public func applicationNames(for bundleIDs: [String]) -> [String: String] { [:] }
+    public func quitApplication(_ bundleID: String) async -> AppQuitOutcome { .stillRunning }
     public func saveClaudeKey(_ key: String) async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }
     public func removeClaudeKey() async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }
     public func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis {

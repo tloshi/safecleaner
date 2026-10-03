@@ -40,6 +40,33 @@ final class HistoryFileTests: XCTestCase {
         XCTAssertThrowsError(try HistoryFile.decode(Data(future.utf8)))
     }
 
+    /// `failure` was added after 0.4. A record written before it has no such key and must still read,
+    /// or adding it would have needed the schema bump this optional field avoids.
+    func testReadsRecordsWrittenBeforeFailureKindExisted() throws {
+        let old = """
+        {"schemaVersion": 1, "records": [{"id": "\(UUID().uuidString)", "date": 0, "originalPath": "/a",
+          "bytes": 0, "error": "Denied"}]}
+        """
+        let decoded = try HistoryFile.decode(Data(old.utf8))
+        XCTAssertEqual(decoded.first?.error, "Denied")
+        XCTAssertNil(decoded.first?.failure)
+    }
+
+    func testFailureKindRoundTrips() throws {
+        let failed = CleanupRecord(originalPath: "/a", trashPath: nil, bytes: 0, error: "Denied", failure: .permission)
+        XCTAssertEqual(try HistoryFile.decode(HistoryFile.encode([failed])).first?.failure, .permission)
+    }
+
+    /// A failure kind added by a later build must not make this build's whole history
+    /// unreadable, because an unreadable history pauses cleanup.
+    func testUnknownFailureKindFromANewerBuildReadsAsOther() throws {
+        let newer = """
+        {"schemaVersion": 1, "records": [{"id": "\(UUID().uuidString)", "date": 0, "originalPath": "/a",
+          "bytes": 0, "error": "Quarantined", "failure": "quarantined"}]}
+        """
+        XCTAssertEqual(try HistoryFile.decode(Data(newer.utf8)).first?.failure, .other)
+    }
+
     func testCorruptDataThrows() {
         XCTAssertThrowsError(try HistoryFile.decode(Data("not json".utf8)))
     }

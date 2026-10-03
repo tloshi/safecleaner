@@ -1,5 +1,55 @@
 # Validation
 
+## Unreleased — project protection, select all, explicit cleanup failures, 3 October 2026
+
+- **Most likely cause of "delete does nothing".** No `history.json` existed on the author's Mac, so
+  no cleanup had reached the move step. Xcode, Android Studio and Chrome were open, and any selection
+  containing one of their caches made `clean` refuse the whole batch, reported only in a banner.
+  Other candidates that also end in "nothing happens" are addressed too: the disabled Move to Trash
+  button now says why, and refusals open a dialog. Not confirmed by a real cleanup.
+- An open app's items are skipped per item and recorded with the app's name (policy change;
+  `testRunningOwnerBlocksBatch` became `testRunningOwnerSkipsOnlyItsOwnItems`). Items with no
+  known owner (project build output, `Caches/Google`) are not covered by this check — the sheet
+  now says so and asks the user to close related apps.
+- Failures carry a `CleanupFailure` kind. The innermost POSIX code decides: EPERM → `permission`
+  (offers Full Disk Access, says locked/system files stay blocked), EACCES → `ownership` (no Full
+  Disk Access offer), ENOENT → `changed`. Unknown kinds from a newer build decode as `other`, so
+  the history stays readable. The field is optional; older histories decode unchanged.
+- **Settings were locked for the whole length of a scan** (the reported "cannot add a key"). The
+  API key now saves during a scan without replacing it, and a status line on every screen names
+  what the app is busy with, with Stop for a scan.
+- Select all (tri-state, filtered rows only, never scan-only, accessibility value) and per-project
+  "Don't touch". Protected paths compare by path components, so a trailing slash or a renamed
+  folder cannot strand a protection. Unprotecting keeps the row; same-named projects show their parent.
+- **Cleanup result screen.** The first real cleanup on the author's Mac moved 189 items and kept 12
+  because their apps were open, shown as one paragraph of repeated sentences. A sheet now lists each
+  open app once with its item count and size, and a **Quit** button that sends a normal quit
+  (`NSRunningApplication.terminate()`, never `forceTerminate`), observes for ~10 s whether the app
+  closed, and shows Closed / Still open. "Select N remaining in Review" puts only the closed apps'
+  items back into the selection; review and confirmation still apply. Other causes get one row each.
+- **Cleanup progress.** Confirm, progress and result are one sheet (swapping sheets in one update is
+  unreliable on macOS). The progress step shows a bar weighted by bytes (re-measuring follows size),
+  "N of M items · X of Y", the item being re-checked now and its size, and "Stop after this item",
+  which cancels between items only. The result now also appears when everything moved, so the end
+  of a long run is unmistakable.
+- Classification tightened after a second review: Carbon OSStatus codes from `trashItem` are mapped
+  (-5000/-54/-61 → ownership, -43/-120 → changed); a bare Cocoa "no permission" is `other`, so Full
+  Disk Access is only suggested on EPERM. A file vanishing inside an item no longer reads as the
+  item being gone.
+- Two adversarial reviews (5 + 3 reviewers, 49 verifiers) confirmed 28 findings; all were fixed except
+  owner coverage for owner-less items, which is recorded above as a limitation.
+- **135 XCTest tests passed:** 85 core, 48 presentation, 2 service. `check-boundaries.py` passed;
+  native arm64 Debug `xcodebuild` succeeded.
+
+### Not performed
+
+- No cleanup was run on this Mac and the new controls were not clicked by the developer.
+- Real macOS EPERM/EACCES refusals were not reproduced; those paths use injected errors.
+- **Not verified that a hardened-runtime build may quit other apps without the
+  `com.apple.security.automation.apple-events` entitlement**, or whether macOS asks for Automation
+  consent. A probe was prepared and not run. The button reports "Still open" if the request is not
+  delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
+
 ## 0.4.0 — optional Claude review, 3 October 2026
 
 - Added opt-in Messages API review with Haiku 4.5 / Sonnet 5.5, Keychain credentials, a fixed

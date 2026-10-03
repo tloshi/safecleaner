@@ -3,6 +3,13 @@ import CryptoKit
 
 public enum FileSafety {
     /// Component-aware containment, never a raw string prefix comparison.
+    /// The same location regardless of a trailing slash, which `URL(fileURLWithPath:)` adds
+    /// only when the folder exists at that moment. `URL ==` therefore stops matching once a
+    /// folder is renamed or deleted, and a protection could no longer be found to remove.
+    public static func isSame(_ a: URL, _ b: URL) -> Bool {
+        a.standardized.pathComponents == b.standardized.pathComponents
+    }
+
     public static func isInside(_ url: URL, root: URL) -> Bool {
         let path = url.standardized.pathComponents
         let base = root.standardized.pathComponents
@@ -128,9 +135,7 @@ public struct CleanupEngine {
                 throw SafetyError.refused("This category is scan-only in this release.")
             }
             let current = try FileSafety.snapshot(candidate.url, root: candidate.allowedRoot)
-            guard current == candidate.stamp else {
-                throw SafetyError.refused("The item changed since scanning. Scan again before cleaning.")
-            }
+            guard current == candidate.stamp else { throw SafetyError.changedSinceScan }
             // Recheck the root chain immediately before moving. This is best-effort
             // protection against ordinary changes, not a hostile-process sandbox.
             try FileSafety.validate(candidate.url, root: candidate.allowedRoot)
@@ -138,8 +143,63 @@ public struct CleanupEngine {
             return CleanupRecord(originalPath: candidate.url.path, trashPath: destination?.path,
                                  bytes: candidate.bytes, error: nil)
         } catch {
+            let failure = Self.classify(error)
             return CleanupRecord(originalPath: candidate.url.path, trashPath: nil,
-                                 bytes: 0, error: error.localizedDescription)
+                                 bytes: 0, error: Self.explain(error, as: failure, item: candidate.url), failure: failure)
+        }
+    }
+
+    /// Failures arrive as Cocoa errors wrapping POSIX ones, so the whole underlying chain is
+    /// read and the innermost POSIX code decides: EPERM and EACCES have different remedies,
+    /// and only one of them is something Full Disk Access can change.
+    static func classify(_ error: Error) -> CleanupFailure {
+        if case SafetyError.changedSinceScan = error { return .changed }
+        var posix: Int32?
+        var cocoaMissing = false
+        var current: NSError? = error as NSError
+        while let nsError = current {
+            if nsError.domain == NSPOSIXErrorDomain { posix = Int32(nsError.code) }
+            // trashItem is a CoreServices move and can report Carbon OSStatus codes instead.
+            if nsError.domain == NSOSStatusErrorDomain {
+                switch nsError.code {
+                case -5000, -54, -61: posix = posix ?? EACCES   // afpAccessDenied, permErr, wrPermErr
+                case -43, -120: posix = posix ?? ENOENT         // fnfErr, dirNFErr
+                default: break
+                }
+            }
+            if nsError.domain == NSCocoaErrorDomain {
+                switch nsError.code {
+                case NSFileNoSuchFileError, NSFileReadNoSuchFileError: cocoaMissing = true
+                default: break
+                }
+            }
+            current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        switch posix {
+        case EACCES?: return .ownership
+        case EPERM?: return .permission
+        case ENOENT?: return .changed
+        // A Cocoa "no permission" with no detail does not say which kind it is, so it is not
+        // labelled as one that Full Disk Access fixes. Its own description is shown instead.
+        default: return cocoaMissing ? .changed : .other
+        }
+    }
+
+    static func explain(_ error: Error, as failure: CleanupFailure, item: URL? = nil) -> String {
+        switch failure {
+        case .permission:
+            return "\(error.localizedDescription) macOS blocked the move. If privacy protection is the cause, Full Disk Access fixes it; locked or system-protected files stay blocked either way."
+        case .ownership:
+            return "\(error.localizedDescription) It, or something inside it, belongs to another user or is read-only, often from an install run with sudo. SafeCleaner does not ask for administrator rights."
+        case .changed:
+            if case SafetyError.changedSinceScan = error { return error.localizedDescription }
+            // A file can vanish *inside* the item while it is re-measured; the item is still there.
+            if let item, (try? FileManager.default.attributesOfItem(atPath: item.path)) != nil {
+                return "Something inside it changed during cleanup: \(error.localizedDescription) Scan again."
+            }
+            return "It no longer exists where the scan found it. Scan again."
+        case .appRunning, .other:
+            return error.localizedDescription
         }
     }
 }

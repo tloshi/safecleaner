@@ -22,7 +22,7 @@ public struct DiskScanner: Sendable {
         let protected = ["Library/Mobile Documents", "Library/CloudStorage", ".Trash"]
             .map { c.home.appendingPathComponent($0) } + c.exclusions
         func excluded(_ url: URL) -> Bool {
-            protected.contains { url.standardized == $0.standardized || FileSafety.isInside(url, root: $0) }
+            protected.contains { FileSafety.isSame(url, $0) || FileSafety.isInside(url, root: $0) }
         }
         func exists(_ url: URL) -> Bool {
             // fileExists follows symlinks, so attributes are used to avoid silently
@@ -144,7 +144,7 @@ public struct DiskScanner: Sendable {
                         .union(["pyproject.toml", "requirements.txt", "setup.py", "go.mod", "Gemfile"])
                     if names.contains(".git") || !names.isDisjoint(with: manifests)
                         || names.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) {
-                        if !report.projects.contains(where: { $0 == directory || FileSafety.isInside(directory, root: $0) }) {
+                        if !report.projects.contains(where: { FileSafety.isSame($0, directory) || FileSafety.isInside(directory, root: $0) }) {
                             report.projects.removeAll { FileSafety.isInside($0, root: directory) }
                             report.projects.append(directory)
                         }

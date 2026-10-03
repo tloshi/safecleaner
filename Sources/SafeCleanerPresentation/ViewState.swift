@@ -21,7 +21,8 @@ public enum Destination: String, CaseIterable, Identifiable, Sendable {
 public enum WorkspaceAction {
     case navigate(Destination), scan, cancelScan, review(CleanCategory?)
     case queryChanged(String), categoryChanged(CleanCategory?)
-    case toggleCandidate(String), clearSelection, excludeCandidate(String), revealCandidate(String)
+    case toggleCandidate(String), toggleSelectAll, clearSelection, excludeCandidate(String), revealCandidate(String)
+    case setProjectProtection(String, Bool), dismissResult, quitApp(String), selectRemaining, stopCleanup
     case addProjectFolder, removeProjectFolder(String), removeExclusion(String), revealHistory(UUID)
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
     case resetHistory, openFullDiskAccessSettings
@@ -63,6 +64,28 @@ public struct CandidateRowState: Identifiable {
     public let canSelect: Bool
     public let canReveal: Bool
     public let canExclude: Bool
+}
+
+public enum SelectAllState: Sendable { case none, some, all }
+
+public struct CleanupProgressState: Equatable {
+    public let fraction: Double
+    public let countLabel: String
+    public let bytesLabel: String
+    public let current: String
+    public let currentDetail: String
+    public let isStopping: Bool
+    public let canStop: Bool
+}
+
+/// A project found by the last scan, or one the user protected (protected projects are not
+/// scanned, so they would otherwise vanish from the list the moment they are protected).
+public struct ProjectRowState: Identifiable {
+    public let id: String
+    public let title: String
+    public let path: String
+    public let detail: String
+    public let isProtected: Bool
 }
 
 public struct LocationRowState: Identifiable {
@@ -111,6 +134,25 @@ public struct WorkspaceViewState {
     public internal(set) var categories: [CategorySummary] = []
     public internal(set) var candidates: [CandidateRowState] = []
     public internal(set) var issues: [ScanIssue] = []
+    public internal(set) var selectAll: SelectAllState = .none
+    public internal(set) var canSelectAll = false
+    public internal(set) var selectAllLabel = "Select all"
+    public internal(set) var selectAllAccessibilityValue = ""
+    /// What the app is busy with, shown on every screen. Controls are disabled while busy,
+    /// and a disabled control with no visible reason reads as a broken one.
+    public internal(set) var busyStatus: String?
+    /// Saving an API key does not interact with a scan or cleanup, so it is not locked by them.
+    public internal(set) var canEditClaudeKey = false
+    public internal(set) var projectsEmptyMessage: String?
+    /// Shown as a sheet, not a banner: a cleanup that left anything behind must not be missable.
+    public internal(set) var cleanupResult: CleanupResultState?
+    public internal(set) var cleanupProgress: CleanupProgressState?
+    /// One sheet carries the whole cleanup: confirm, then progress, then the result. Swapping
+    /// separate sheets in a single update is unreliable on macOS, and the user should never be
+    /// left looking at a spinner with no sense of when it is done.
+    public internal(set) var showCleanupSheet = false
+    public internal(set) var confirmationHint: String?
+    public internal(set) var projects: [ProjectRowState] = []
     public internal(set) var projectRoots: [LocationRowState] = []
     public internal(set) var exclusions: [LocationRowState] = []
     public internal(set) var history: [HistoryRowState] = []
@@ -141,12 +183,23 @@ public struct WorkspaceViewState {
     public init() {}
 }
 
-enum Operation { case loading, idle, scanning, cleaning, choosingFolder, analyzing, savingKey }
+enum Operation { case loading, idle, scanning, cleaning, choosingFolder, analyzing }
 
 struct WorkspaceSession {
     var destination: Destination = .overview
     var operation: Operation = .loading
     var candidates: [Candidate] = []
+    var projects: [URL] = []
+    /// Projects unprotected since the last scan: listed, but their build folders are not known yet.
+    var rescanNeeded: [URL] = []
+    /// Separate from `operation` so a key can be saved during a scan without replacing it.
+    var savingKey = false
+    var outcome: CleanupOutcome?
+    var cleanupProgress: CleanupProgress?
+    var stoppingCleanup = false
+    /// The project roots the last completed scan covered, so a newly added root is not
+    /// described as "no projects found" before it was ever scanned.
+    var scannedRoots: [URL] = []
     var selected = Set<String>()
     var issues: [ScanIssue] = []
     var settings = WorkspaceSettings()

@@ -9,7 +9,7 @@ enum WorkspacePresenter {
     static func make(_ session: WorkspaceSession, preview: Bool, homePath: String, version: String) -> WorkspaceViewState {
         var state = WorkspaceViewState()
         state.version = version
-        let busy = session.operation != .idle
+        let busy = session.operation != .idle || session.savingKey
         let selected = session.candidates.filter { $0.canTrash && session.selected.contains($0.id) }
         let found = session.candidates.reduce(Int64(0)) { $0 + $1.bytes }
         let selectedBytes = selected.reduce(Int64(0)) { $0 + $1.bytes }
@@ -52,11 +52,29 @@ enum WorkspacePresenter {
                 isSelected: session.selected.contains(item.id), canSelect: item.canTrash && !busy && !preview,
                 canReveal: !preview, canExclude: !busy && !preview)
         }
-        state.candidates = session.candidates.filter {
-            (session.aiGroupFilter == nil || session.aiGroupFilter!.candidateIDs.contains($0.id)) &&
-            (session.category == nil || $0.category == session.category) &&
-            (session.query.isEmpty || $0.title.localizedCaseInsensitiveContains(session.query) || $0.url.path.localizedCaseInsensitiveContains(session.query))
-        }.map(row)
+        let shown = visible(session)
+        state.candidates = shown.map(row)
+        // "Select all" acts on what is on screen, so a search or category narrows it. It
+        // never reaches scan-only items, the same rule a single checkbox follows.
+        let selectable = shown.filter(\.canTrash)
+        let chosen = selectable.filter { session.selected.contains($0.id) }.count
+        state.canSelectAll = !busy && !preview && !selectable.isEmpty
+        state.selectAll = chosen == 0 ? .none : chosen == selectable.count ? .all : .some
+        state.selectAllAccessibilityValue = "\(chosen) of \(selectable.count) selected"
+        state.selectAllLabel = session.category == nil && session.query.isEmpty && session.aiGroupFilter == nil
+            ? "Select all (\(selectable.count))" : "Select all shown (\(selectable.count))"
+        state.cleanupResult = session.outcome.map {
+            CleanupResultPresenter.make($0, candidates: session.candidates, busy: busy, preview: preview)
+        }
+        state.cleanupProgress = session.operation == .cleaning ? progress(session) : nil
+        state.projects = projectRows(session, homePath: homePath)
+        state.projectsEmptyMessage = !state.projects.isEmpty ? nil
+            : session.settings.projectRoots.isEmpty ? "Add a project folder above, then scan."
+            : session.operation == .scanning ? "Scanning your project folders…"
+            : state.hasScanned && session.settings.projectRoots.allSatisfy({ root in session.scannedRoots.contains { FileSafety.isSame($0, root) } })
+                ? "No projects found. A project is a folder with .git or a build manifest such as package.json or build.gradle."
+            : "Scan to list the projects in your folders."
+        state.busyStatus = busyStatus(session)
         state.issues = session.issues
         func location(_ url: URL) -> LocationRowState { .init(id: url.path, title: url.lastPathComponent, path: url.path) }
         state.projectRoots = session.settings.projectRoots.map(location)
@@ -75,10 +93,15 @@ enum WorkspacePresenter {
         state.confirmationItems = selected.map(row)
         state.confirmationAcknowledged = session.acknowledged
         state.canConfirmCleanup = state.canReviewSelection && session.showConfirmation && session.acknowledged
+        state.showCleanupSheet = state.showConfirmation || state.isCleaning || state.cleanupResult != nil
+        // A disabled button with no explanation reads as a broken one.
+        state.confirmationHint = state.canReviewSelection && !session.acknowledged
+            ? "Tick the box above to enable Move to Trash." : nil
         state.claudeKeyDraft = session.claudeKeyDraft; state.hasClaudeKey = session.hasClaudeKey
         state.claudeModel = session.claudeModel; state.isAnalyzing = session.operation == .analyzing
         state.canAnalyze = !busy && !preview && session.hasClaudeKey && session.aiPacket != nil
-        state.canSaveClaudeKey = !busy && !preview && !session.claudeKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        state.canEditClaudeKey = !preview && !session.savingKey && session.operation != .loading && session.operation != .analyzing
+        state.canSaveClaudeKey = state.canEditClaudeKey && !session.claudeKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         state.aiGroupFilterTitle = session.aiGroupFilter?.kind
         if let packet = session.aiPacket {
             state.aiPayload = packet.json
@@ -97,5 +120,78 @@ enum WorkspacePresenter {
             }
         }
         return state
+    }
+
+    /// The candidates the Review list shows. Shared with the ViewModel so "Select all"
+    /// selects exactly the rows the user is looking at.
+    static func visible(_ session: WorkspaceSession) -> [Candidate] {
+        session.candidates.filter {
+            (session.aiGroupFilter == nil || session.aiGroupFilter!.candidateIDs.contains($0.id)) &&
+            (session.category == nil || $0.category == session.category) &&
+            (session.query.isEmpty || $0.title.localizedCaseInsensitiveContains(session.query) || $0.url.path.localizedCaseInsensitiveContains(session.query))
+        }
+    }
+
+    private static func busyStatus(_ session: WorkspaceSession) -> String? {
+        if session.savingKey { return "Saving your API key…" }
+        switch session.operation {
+        case .idle: return nil
+        case .loading: return "Preparing your workspace…"
+        case .scanning: return "Scanning · Folders and project protection unlock when it finishes"
+        case .cleaning:
+            guard let progress = session.cleanupProgress else { return "Moving items to Trash…" }
+            return "Moving to Trash · \(progress.completed) of \(progress.total)"
+        case .choosingFolder: return "Choose a folder in the open panel"
+        case .analyzing: return "Waiting for Claude…"
+        }
+    }
+
+    private static func progress(_ session: WorkspaceSession) -> CleanupProgressState {
+        guard let p = session.cleanupProgress else {
+            return CleanupProgressState(fraction: 0, countLabel: "Preparing…", bytesLabel: "",
+                current: "Writing the activity record", currentDetail: "Nothing moves until it is saved.",
+                isStopping: session.stoppingCleanup, canStop: false)
+        }
+        // Bytes, not item count: time goes into re-measuring, which follows size, and one
+        // 9 GB folder among 200 small caches would otherwise sit at "1%" for most of the run.
+        let fraction = p.bytesTotal > 0 ? Double(p.bytesCompleted) / Double(p.bytesTotal)
+            : p.total > 0 ? Double(p.completed) / Double(p.total) : 0
+        let detail = session.stoppingCleanup ? "Stopping after this item…"
+            : p.current == nil ? "Finishing…"
+            : "\(byteLabel(p.currentBytes)) · Checking nothing changed since the scan, then moving it"
+        return CleanupProgressState(fraction: min(1, fraction), countLabel: "\(p.completed) of \(p.total) items",
+            bytesLabel: "\(byteLabel(p.bytesCompleted)) of \(byteLabel(p.bytesTotal))",
+            current: p.current ?? "All items attempted", currentDetail: detail,
+            isStopping: session.stoppingCleanup, canStop: !session.stoppingCleanup && p.current != nil)
+    }
+
+    private static func projectRows(_ session: WorkspaceSession, homePath: String) -> [ProjectRowState] {
+        let protected = session.settings.protectedProjects
+        var urls = protected.map(\.standardized)
+        for url in session.projects where !urls.contains(where: { FileSafety.isSame($0, url) }) { urls.append(url.standardized) }
+        // Two projects can share a folder name (clientA/app, clientB/app); the parent tells them
+        // apart, and the home-relative path does when the parents match too.
+        func qualified(_ url: URL) -> String { "\(url.deletingLastPathComponent().lastPathComponent) / \(url.lastPathComponent)" }
+        let names = urls.map(\.lastPathComponent), parents = urls.map(qualified)
+        func title(_ url: URL) -> String {
+            let name = url.lastPathComponent
+            guard names.filter({ $0 == name }).count > 1 else { return name }
+            let parent = qualified(url)
+            guard parents.filter({ $0 == parent }).count > 1 else { return parent }
+            return url.path.hasPrefix(homePath + "/") ? "~" + url.path.dropFirst(homePath.count) : url.path
+        }
+        return urls.map { url in
+            let isProtected = protected.contains { FileSafety.isSame($0, url) }
+            let builds = session.candidates.filter { $0.category == .projects && FileSafety.isInside($0.url, root: url) }
+            let bytes = builds.reduce(Int64(0)) { $0 + $1.bytes }
+            let detail = isProtected ? "Protected · Never scanned or cleaned"
+                : session.rescanNeeded.contains(where: { FileSafety.isSame($0, url) }) ? "Not scanned yet · Scan again to include its build folders"
+                : builds.isEmpty ? "No build folders found"
+                : "\(builds.count) build \(builds.count == 1 ? "folder" : "folders") · \(byteLabel(bytes))"
+            return ProjectRowState(id: url.path, title: title(url), path: url.path, detail: detail, isProtected: isProtected)
+        }.sorted {
+            let order = $0.title.localizedStandardCompare($1.title)
+            return order == .orderedSame ? $0.path < $1.path : order == .orderedAscending
+        }
     }
 }

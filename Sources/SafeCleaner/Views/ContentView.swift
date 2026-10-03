@@ -46,12 +46,16 @@ struct ContentView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }
+
         }
         .background(Palette.background).tint(Palette.mint)
         .animation(reduceMotion ? nil : Motion.navigation, value: state.destination)
         .animation(reduceMotion ? nil : Motion.feedback, value: state.message)
-        .sheet(isPresented: Binding(get: { state.showConfirmation }, set: { if !$0 { send(.dismissConfirmation) } })) {
-            ConfirmationView(state: state, send: send)
+        .sheet(isPresented: Binding(get: { state.showCleanupSheet }, set: { isShown in
+            guard !isShown, !state.isCleaning else { return }
+            send(state.cleanupResult != nil ? .dismissResult : .dismissConfirmation)
+        })) {
+            CleanupFlowView(state: state, send: send)
         }
     }
 
@@ -119,8 +123,16 @@ struct ContentView: View {
             Text("/").foregroundStyle(Palette.muted.opacity(0.5)).padding(.horizontal, 7)
             Text(state.destination.rawValue).id(state.destination).transition(.opacity)
             Spacer()
-            Label("Local scan · Optional AI", systemImage: "lock.shield").foregroundStyle(Palette.muted)
-            Circle().fill(Palette.mint).frame(width: 6, height: 6).padding(.leading, 14)
+            if let status = state.busyStatus {
+                ProgressView().controlSize(.small).padding(.trailing, 4)
+                Text(status).foregroundStyle(Palette.muted).lineLimit(1)
+                if state.isScanning {
+                    Button("Stop") { send(.cancelScan) }.padding(.leading, 8)
+                }
+            } else {
+                Label("Local scan · Optional AI", systemImage: "lock.shield").foregroundStyle(Palette.muted)
+                Circle().fill(Palette.mint).frame(width: 6, height: 6).padding(.leading, 14)
+            }
         }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 32).frame(height: 67)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 1) }
     }

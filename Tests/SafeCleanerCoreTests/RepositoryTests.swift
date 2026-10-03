@@ -104,14 +104,54 @@ import XCTest
         do { _ = try await repository.clean([fixture("second")]); XCTFail("History is not writable") } catch {}
     }
 
-    func testRunningOwnerBlocksBatch() async {
+    /// POLICY CHANGE: an open app used to refuse the *whole* batch. On a developer's
+    /// Mac Xcode, Android Studio or a browser is nearly always open, so "select all" could
+    /// never move anything, and no activity was ever written. The open app's own items are
+    /// still never touched; they are now skipped and reported instead of blocking the rest.
+    func testRunningOwnerSkipsOnlyItsOwnItems() async throws {
+        let desktop = FakeDesktop(), cleaner = FakeCleaner()
+        desktop.running = ["test.app"]; desktop.names = ["test.app": "Test App"]
+        let repository = make(desktop: desktop, cleaner: cleaner)
+        _ = await repository.load()
+        let result = try await repository.clean([fixture("owned", owner: "test.app"), fixture("free")])
+        let moves = await cleaner.calls
+        XCTAssertEqual(moves, 1, "only the item whose app is closed may move")
+        XCTAssertEqual(result.records.map(\.originalPath), ["/fixture/owned", "/fixture/free"])
+        XCTAssertEqual(result.records[0].failure, .appRunning)
+        XCTAssertNil(result.records[0].trashPath)
+        XCTAssertTrue(result.records[0].error?.contains("Test App is open") == true)
+        XCTAssertNil(result.records[1].error)
+    }
+
+    func testRunningOwnerOfEveryItemMovesNothing() async throws {
         let desktop = FakeDesktop(), cleaner = FakeCleaner()
         desktop.running = ["test.app"]
         let repository = make(desktop: desktop, cleaner: cleaner)
         _ = await repository.load()
-        do { _ = try await repository.clean([fixture(owner: "test.app")]); XCTFail("Should refuse") } catch {}
+        let result = try await repository.clean([fixture(owner: "test.app")])
         let moves = await cleaner.calls
         XCTAssertEqual(moves, 0)
+        XCTAssertEqual(result.records.first?.failure, .appRunning)
+        XCTAssertTrue(result.records.first?.error?.contains("test.app") == true, "falls back to the bundle ID")
+    }
+
+    func testProtectedProjectMustBeInsideAProjectRootAndBlocksCleanup() async throws {
+        let settings = FakeSettings(), cleaner = FakeCleaner()
+        settings.settings = .init(projectRoots: [URL(fileURLWithPath: "/fixture/projects")])
+        let repository = make(settings: settings, cleaner: cleaner)
+        _ = await repository.load()
+        XCTAssertThrowsError(try repository.setProjectProtection(URL(fileURLWithPath: "/elsewhere/app"), protected: true))
+        let app = URL(fileURLWithPath: "/fixture/projects/app")
+        _ = try repository.setProjectProtection(app, protected: true)
+        XCTAssertEqual(settings.settings.protectedProjects, [app])
+        do { _ = try await repository.clean([fixture("projects/app/build")]); XCTFail("Protected project must refuse") } catch {}
+        var moves = await cleaner.calls
+        XCTAssertEqual(moves, 0)
+        _ = try repository.setProjectProtection(app, protected: false)
+        XCTAssertTrue(settings.settings.protectedProjects.isEmpty)
+        _ = try await repository.clean([fixture("projects/app/build")])
+        moves = await cleaner.calls
+        XCTAssertEqual(moves, 1)
     }
 
     func testNewDescendantExclusionBlocksPreviouslyScannedParent() async throws {
@@ -133,6 +173,42 @@ import XCTest
         settings.fail = false
         let result = try await repository.clean([fixture()])
         XCTAssertEqual(result.records.count, 1)
+    }
+
+    /// `URL(fileURLWithPath:)` adds a trailing slash only while the folder exists. A project
+    /// protected while it existed and then renamed must still be found to unprotect.
+    func testProtectionIsRemovedRegardlessOfTrailingSlash() async throws {
+        let settings = FakeSettings()
+        settings.settings = .init(projectRoots: [URL(fileURLWithPath: "/fixture/projects")])
+        let repository = make(settings: settings)
+        _ = await repository.load()
+        _ = try repository.setProjectProtection(URL(fileURLWithPath: "/fixture/projects/app/"), protected: true)
+        _ = try repository.setProjectProtection(URL(fileURLWithPath: "/fixture/projects/app/"), protected: true)
+        XCTAssertEqual(settings.settings.protectedProjects.count, 1, "protecting twice must not duplicate")
+        _ = try repository.setProjectProtection(URL(fileURLWithPath: "/fixture/projects/app"), protected: false)
+        XCTAssertTrue(settings.settings.protectedProjects.isEmpty)
+    }
+
+    func testProgressIsReportedBeforeEachItemAndAtTheEnd() async throws {
+        let repository = make()
+        _ = await repository.load()
+        var reports: [CleanupProgress] = []
+        _ = try await repository.clean([fixture("first"), fixture("second")]) { reports.append($0) }
+        XCTAssertEqual(reports.map(\.completed), [0, 1, 2])
+        XCTAssertEqual(reports.map(\.current), ["first", "second", nil])
+        XCTAssertEqual(reports.map(\.bytesCompleted), [0, 100, 200])
+        XCTAssertEqual(Set(reports.map(\.bytesTotal)), [200])
+    }
+
+    func testQuitIsDelegatedAndNamesAreResolved() async {
+        let desktop = FakeDesktop()
+        desktop.names = ["test.app": "Test App"]; desktop.quitOutcome = .quit
+        let repository = make(desktop: desktop)
+        _ = await repository.load()
+        XCTAssertEqual(repository.applicationNames(for: ["test.app", "unknown.app"]), ["test.app": "Test App"])
+        let outcome = await repository.quitApplication("test.app")
+        XCTAssertEqual(outcome, .quit)
+        XCTAssertEqual(desktop.quitRequests, ["test.app"])
     }
 
     func testDuplicateCandidatesCannotMoveTwice() async {
@@ -181,8 +257,13 @@ private struct FakeValidator: ProjectRootValidating { func validate(_ url: URL) 
 }
 @MainActor private final class FakeDesktop: DesktopInteracting {
     var running: Set<String> = []
+    var names: [String: String] = [:]
     func chooseProjectFolders() async -> [URL] { [] }
     func runningApplicationIDs() -> Set<String> { running }
+    func applicationName(for bundleID: String) -> String? { names[bundleID] }
+    var quitOutcome: AppQuitOutcome = .stillRunning
+    var quitRequests: [String] = []
+    func quitApplication(_ bundleID: String) async -> AppQuitOutcome { quitRequests.append(bundleID); return quitOutcome }
     func reveal(_ url: URL) {}
     func openFullDiskAccessSettings() {}
 }

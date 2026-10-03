@@ -192,3 +192,36 @@ adapterë Android/Gradle/simulatorësh ose kontrolle të reja të ciklit të jet
 Nuk njeh përdorimin real/aktivitetin nga madhësia e grupit. Nuk ka cache persistente ose buxhet
 mujor brenda app-it. Input tokens nuk maten saktë përpara kërkesës; byte cap kufizon payload-in.
 Integrimi live me key të përdoruesit dhe faturimi real mbeten për provë nga përdoruesi.
+
+## 14. Mbrojtja e projekteve, "Select all" dhe gabimet e pastrimit (e pa-publikuar, 3 tetor 2026)
+
+**E implementuar:**
+
+- **"Don't touch" për projekt.** Ekrani Projects liston projektet e gjetura nga skanimi i fundit;
+  projekti i mbrojtur nuk skanohet, pastrimi e refuzon çdo artikull brenda tij, dhe mbetet në listë
+  edhe pasi çaktivizohet ("Not scanned yet" deri në skanimin e ardhshëm).
+- **Select all** me tri gjendje mbi listën e Review; vetëm rreshtat e shfaqur, kurrë "Scan only".
+- **Pastrimi nuk dështon më në heshtje** (shkaku më i mundshëm: një aplikacion i hapur refuzonte
+  tërë batch-in). Artikujt e një aplikacioni të hapur lihen në vend me emrin e aplikacionit; çdo
+  dështim hap dialog sipas shkakut. "Open Full Disk Access" ofrohet vetëm për EPERM, jo për EACCES
+  (pronar tjetër / sudo), ku Full Disk Access s'ndihmon.
+- **Statusi i punës në çdo ekran** dhe API key mund të ruhet gjatë skanimit (më parë fusha ishte e
+  bllokuar pa shpjegim për gjithë kohëzgjatjen e skanimit).
+
+- **Ekrani i rezultatit të pastrimit:** çdo aplikacion i hapur shfaqet një herë me numrin e
+  artikujve dhe madhësinë, me buton **Quit** (mbyllje normale, kurrë force-quit; rezultati
+  vëzhgohet: Closed / Still open) dhe "Select N remaining in Review" për artikujt e aplikacioneve të
+  mbyllura — prapë kalojnë nëpër Review dhe konfirmim.
+
+- **Progresi i pastrimit:** konfirmimi, progresi dhe rezultati janë një sheet i vetëm; shirit sipas
+  madhësisë, "N of M items", artikulli që po rikontrollohet tani dhe "Stop after this item" (ndalet
+  vetëm mes artikujve). Rezultati shfaqet edhe kur gjithçka lëvizi.
+
+**E pa-verifikuar:** nëse build-i me hardened runtime mund t'i mbyllë aplikacionet e tjera pa
+entitlement-in `com.apple.security.automation.apple-events`.
+
+**Kufizim / e planifikuar:** kontrolli i aplikacionit të hapur mbulon vetëm artikujt me
+`ownerBundleID`. Build output-i i projekteve dhe `Caches/Google` (Chrome + Android Studio) s'kanë
+pronar, prandaj lëvizin edhe kur IDE/browser-i është i hapur. Duhet hartë pronarësh.
+
+**E pa-verifikuar:** asnjë pastrim real; refuzimet reale EPERM/EACCES nuk u riprodhuan.

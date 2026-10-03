@@ -55,7 +55,7 @@ private enum PreviewFixtures {
     func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings { throw disabled }
     func exclude(_ url: URL) throws -> WorkspaceSettings { throw disabled }
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings { throw disabled }
-    func clean(_ items: [Candidate]) async throws -> CleanupBatchResult { throw disabled }
+    func clean(_ items: [Candidate], progress: @escaping @MainActor (CleanupProgress) -> Void) async throws -> CleanupBatchResult { throw disabled }
     func resetHistory() async throws -> [CleanupRecord] { throw disabled }
     func reveal(_ url: URL) {}
     func openFullDiskAccessSettings() {}
