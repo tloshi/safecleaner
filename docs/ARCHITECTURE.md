@@ -80,3 +80,24 @@ Before adding a cleanable location:
 5. Prefer scan-only until the lifecycle and rebuild behavior have been tested.
 
 Never add a broad `find … -name build -delete`, blanket library cleanup, or shell command assembled from a user-provided path.
+
+
+## Optional Claude review (0.4)
+
+`AIReviewPacket` in Core groups candidates using a fixed label catalogue. The encoded payload
+contains group IDs, types, counts, allocated MB, scan-only flags and counts of omitted groups and
+scan issues. Local paths, titles, digests, owners and errors are not encoded. A separate local
+fingerprint includes snapshot digests so changed scans invalidate advice reuse.
+
+The ViewModel reaches Claude only through `CleaningRepository`. The repository reads the API key
+through `APIKeyStoring`; `KeychainAPIKeyStore` and the concrete `ClaudeService` are assembled in
+`AppContainer`. The service uses an ephemeral HTTPS session to the fixed Anthropic endpoint,
+refuses redirects, caps response bytes and has no tool, filesystem or cleanup capability.
+`ClaudeMessages` builds bounded requests and validates JSON responses, known/unique group IDs,
+stop reasons and scan-only restrictions. Network/error bodies are never logged or surfaced raw.
+
+Analysis is an explicit busy operation. No startup/scan/key-save requests, automatic retries,
+model escalation or auto-selection exist. New scans, candidate removal and model changes clear
+visible advice; a single most recent successful analysis is cached in memory by model and snapshot.
+Key replacement/removal clears the cache. Key input is transient, cleared after saving or leaving
+Settings, and never loaded back into the view state. Preview never accesses Keychain or the API.

@@ -21,11 +21,13 @@ import SafeCleanerCore
         }
         return WorkspaceSettings(
             projectRoots: roots.map { URL(fileURLWithPath: $0) },
-            exclusions: exclusions.map { URL(fileURLWithPath: $0) })
+            exclusions: exclusions.map { URL(fileURLWithPath: $0) },
+            protectedProjects: (defaults.stringArray(forKey: "protectedProjects") ?? []).map { URL(fileURLWithPath: $0) })
     }
     func save(_ settings: WorkspaceSettings) throws {
         defaults.set(settings.projectRoots.map(\.path), forKey: "projectRoots")
         defaults.set(settings.exclusions.map(\.path), forKey: "exclusions")
+        defaults.set(settings.protectedProjects.map(\.path), forKey: "protectedProjects")
     }
 }
 

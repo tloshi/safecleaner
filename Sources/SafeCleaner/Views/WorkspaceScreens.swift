@@ -110,6 +110,7 @@ struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 PageHeading(eyebrow: "THOUGHTFUL BY DEFAULT", title: "Make room, on your terms.", subtitle: "Personal, local and deliberately transparent.")
+                ClaudeSettingsCard(state: state, send: send)
                 Card {
                     VStack(alignment: .leading, spacing: 20) {
                         Label("Cleanup policy", systemImage: "shield.lefthalf.filled").font(.headline)
@@ -134,7 +135,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Text("SafeCleaner \(state.version) · Native SwiftUI · No network requests or telemetry\nAccess failures appear in scan results. Full Disk Access does not override all macOS protections.")
+                Text("SafeCleaner \(state.version) · Local scans · Optional requests to Anthropic · No telemetry\nAccess failures appear in scan results. Full Disk Access does not override all macOS protections.")
                     .font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(5)
             }.padding(32)
         }

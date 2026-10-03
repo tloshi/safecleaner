@@ -9,6 +9,7 @@ let package = Package(
         .target(name: "SafeCleanerCore"),
         .target(name: "SafeCleanerPresentation", dependencies: ["SafeCleanerCore"]),
         .executableTarget(name: "SafeCleaner", dependencies: ["SafeCleanerCore", "SafeCleanerPresentation"]),
+        .testTarget(name: "SafeCleanerServiceTests", dependencies: ["SafeCleaner", "SafeCleanerCore"]),
         .testTarget(name: "SafeCleanerCoreTests", dependencies: ["SafeCleanerCore"]),
         .testTarget(name: "SafeCleanerPresentationTests", dependencies: ["SafeCleanerPresentation", "SafeCleanerCore"])
     ]

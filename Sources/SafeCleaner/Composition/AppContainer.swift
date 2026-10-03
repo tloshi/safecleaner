@@ -21,7 +21,8 @@ import SafeCleanerPresentation
             scanner: LocalScanService(), cleaner: LocalCleanupService(), disk: LocalDiskInfoService(home: home),
             settings: UserDefaultsSettingsStore(defaults: .standard),
             history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/SafeCleaner/history.json")),
-            desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home)
+            desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home,
+            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore())
         return WorkspaceViewModel(repository: repository, homePath: home.path, version: bundleVersion)
     }
 }

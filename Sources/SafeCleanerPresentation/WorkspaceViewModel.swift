@@ -29,10 +29,12 @@ import SafeCleanerCore
         session.settings = snapshot.settings; session.records = snapshot.history; session.disk = snapshot.disk
         session.historyAvailable = snapshot.historyAvailable
         if previewReport == nil {
+            do { session.hasClaudeKey = try repository.hasClaudeKey() }
+            catch { session.message = error.localizedDescription }
             session.access = DiskAccess.report(home: URL(fileURLWithPath: homePath),
                                                projectRoots: snapshot.settings.projectRoots)
         }
-        session.message = snapshot.notices.isEmpty ? nil : snapshot.notices.joined(separator: "\n")
+        if !snapshot.notices.isEmpty { session.message = snapshot.notices.joined(separator: "\n") }
         if let previewReport { apply(previewReport) }
         session.operation = .idle
         publish()
@@ -41,9 +43,11 @@ import SafeCleanerCore
     /// Returned task is useful to lifecycle owners and deterministic unit tests.
     @discardableResult public func send(_ action: WorkspaceAction) -> Task<Void, Never>? {
         switch action {
-        case .navigate(let destination): session.destination = destination
+        case .navigate(let destination):
+            session.destination = destination
+            if destination != .settings { session.claudeKeyDraft = "" }
         case .dismissMessage: session.message = nil
-        case .review(let category): session.category = category; session.query = ""; session.destination = .review
+        case .review(let category): session.category = category; session.query = ""; session.aiGroupFilter = nil; session.destination = .review
         case .queryChanged(let query): session.query = query
         case .categoryChanged(let category): session.category = category
         case .cancelScan:
@@ -52,6 +56,7 @@ import SafeCleanerCore
             guard state.canScan else { return nil }
             session.operation = .scanning; session.progress = "Preparing your scan…"; session.message = nil
             session.selected.removeAll(); session.candidates = []; session.issues = []; session.lastScan = nil
+            invalidateAI()
             closeConfirmation()
             let id = UUID(); scanID = id
             publish()
@@ -85,6 +90,7 @@ import SafeCleanerCore
                 session.settings = try repository.exclude(candidate.url)
                 session.candidates.removeAll { $0.id == id || FileSafety.isInside($0.url, root: candidate.url) }
                 session.selected.formIntersection(session.candidates.map(\.id))
+                invalidateAI()
                 closeConfirmation()
             }
         case .openFullDiskAccessSettings:
@@ -129,11 +135,62 @@ import SafeCleanerCore
             handle {
                 session.settings = try repository.removeProjectFolder(root)
                 session.candidates.removeAll { $0.category == .projects && $0.allowedRoot == root }
+                invalidateAI()
                 session.selected.formIntersection(session.candidates.map(\.id)); closeConfirmation()
             }
         case .removeExclusion(let id):
             guard state.canEditSettings, let url = session.settings.exclusions.first(where: { $0.path == id }) else { return nil }
             handle { session.settings = try repository.removeExclusion(url) }
+        case .claudeKeyChanged(let key):
+            guard state.canEditSettings else { return nil }
+            session.claudeKeyDraft = String(key.prefix(512))
+        case .saveClaudeKey, .removeClaudeKey:
+            guard state.canEditSettings else { return nil }
+            let removing: Bool
+            if case .removeClaudeKey = action { removing = true } else { removing = false }
+            guard removing || state.canSaveClaudeKey else { return nil }
+            let key = session.claudeKeyDraft
+            session.claudeKeyDraft = ""; session.operation = .savingKey; session.message = nil; publish()
+            let task = Task<Void, Never> { [weak self] in
+                guard let self else { return }
+                do {
+                    if removing { try await self.repository.removeClaudeKey() }
+                    else { try await self.repository.saveClaudeKey(key) }
+                    self.session.hasClaudeKey = !removing
+                    self.session.aiAnalysis = nil
+                    self.session.message = removing ? "API key removed from Keychain." : "API key saved in Keychain. No request has been sent."
+                } catch { self.session.message = error.localizedDescription }
+                self.session.operation = .idle; self.activeTask = nil; self.publish()
+            }
+            activeTask = task; return task
+        case .claudeModelChanged(let model):
+            guard state.canEditSettings else { return nil }
+            session.claudeModel = model; session.aiAnalysis = nil
+        case .analyzeWithClaude:
+            guard state.canAnalyze, let packet = session.aiPacket else { return nil }
+            session.operation = .analyzing; session.message = nil; session.aiAnalysis = nil
+            closeConfirmation(); publish()
+            let model = session.claudeModel
+            let task = Task<Void, Never> { [weak self] in
+                guard let self else { return }
+                do {
+                    let result = try await self.repository.analyzeWithClaude(packet, model: model)
+                    try Task.checkCancellation()
+                    self.session.aiAnalysis = result
+                } catch is CancellationError {
+                    self.session.message = "Claude request cancelled. A request already submitted may still use credits. No files or selection changed."
+                } catch { self.session.message = error.localizedDescription }
+                self.session.operation = .idle; self.activeTask = nil; self.publish()
+            }
+            activeTask = task; return task
+        case .cancelClaude:
+            if session.operation == .analyzing { activeTask?.cancel() }
+        case .reviewAIGroup(let id):
+            guard !state.isBusy, !state.isPreview,
+                  session.aiAnalysis?.recommendations.contains(where: { $0.groupID == id }) == true,
+                  let group = session.aiPacket?.groups.first(where: { $0.id == id }) else { return nil }
+            session.aiGroupFilter = group; session.query = ""; session.category = nil; session.destination = .review
+        case .clearAIGroupFilter: session.aiGroupFilter = nil
         }
         publish()
         return nil
@@ -164,6 +221,7 @@ import SafeCleanerCore
             let ids = Set(moved.map(\.originalPath))
             session.records = result.history
             session.candidates.removeAll { ids.contains($0.id) }
+            invalidateAI()
             session.selected.removeAll()
             session.message = result.stoppedReason ?? "\(moved.count) items moved to Trash. \(result.records.count - moved.count) failed. Space is not reclaimed until Trash is emptied."
             session.destination = .history
@@ -180,6 +238,11 @@ import SafeCleanerCore
     }
     private func apply(_ report: ScanReport) {
         session.candidates = report.candidates; session.issues = report.issues; session.lastScan = report.finishedAt
+        invalidateAI()
+    }
+    private func invalidateAI() {
+        session.aiAnalysis = nil; session.aiGroupFilter = nil
+        session.aiPacket = session.candidates.isEmpty ? nil : AIReviewPacket(candidates: session.candidates, skippedLocations: session.issues.count)
     }
     private func item(_ id: String) -> Candidate? { session.candidates.first { $0.id == id } }
     private func closeConfirmation() { session.showConfirmation = false; session.acknowledged = false }

@@ -176,3 +176,19 @@ Gjendjet e UI: pa skanim; duke skanuar; skanim i anuluar; pa rezultate; rezultat
 - Testet mbulojnë rrezikun real; provat nuk përdorin cache-t personale si fixtures.
 
 Vlerësimi i kohës bëhet pas provës së 0.1 dhe inventarit të veglave të instaluara. Fazat kanë kritere dalëse, jo afate artificiale që nxisin pastrim të pasigurt.
+
+
+## 13. Claude review — 0.4 (3 tetor 2026)
+
+**E implementuar:** integrim opsional direkt me Anthropic Messages API; Haiku 4.5 si model ekonomik,
+Sonnet 5.5 si alternativë; API key në Keychain; përmbledhje e grupuar deri në 16 grupe, pa emra,
+rrugë, përmbajtje skedarësh ose gabime të papërpunuara. Një kërkesë vetëm pas veprimit të përdoruesit,
+1200 tokenë dalje maksimum, request body deri në 12 KB, shfaqje e tokenëve realë, cache në memorie
+për analizën e fundit identike, anulim dhe pa retries automatike. Rekomandimet vetëm filtrojnë
+listën për shqyrtim; nuk përzgjedhin dhe nuk autorizojnë pastrim.
+
+**Kufizime / e planifikuar:** AI analizon vetëm kandidatët ekzistues; nuk shton disk explorer,
+adapterë Android/Gradle/simulatorësh ose kontrolle të reja të ciklit të jetës së projekteve.
+Nuk njeh përdorimin real/aktivitetin nga madhësia e grupit. Nuk ka cache persistente ose buxhet
+mujor brenda app-it. Input tokens nuk maten saktë përpara kërkesës; byte cap kufizon payload-in.
+Integrimi live me key të përdoruesit dhe faturimi real mbeten për provë nga përdoruesi.

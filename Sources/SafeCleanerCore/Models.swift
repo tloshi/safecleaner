@@ -74,11 +74,12 @@ public struct ScanIssue: Identifiable, Codable, Sendable {
 }
 
 public struct ScanReport: Sendable {
+    public var projects: [URL] = []
     public var candidates: [Candidate] = []
     public var issues: [ScanIssue] = []
     public var finishedAt = Date()
-    public init(candidates: [Candidate] = [], issues: [ScanIssue] = [], finishedAt: Date = Date()) {
-        self.candidates = candidates; self.issues = issues; self.finishedAt = finishedAt
+    public init(candidates: [Candidate] = [], issues: [ScanIssue] = [], finishedAt: Date = Date(), projects: [URL] = []) {
+        self.candidates = candidates; self.issues = issues; self.finishedAt = finishedAt; self.projects = projects
     }
 }
 

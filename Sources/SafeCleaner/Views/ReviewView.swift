@@ -9,6 +9,13 @@ struct ReviewView: View {
     let send: (WorkspaceAction) -> Void
     var body: some View {
         VStack(spacing: 0) {
+            if let group = state.aiGroupFilterTitle {
+                HStack {
+                    Text("Claude review: \(group) · Nothing selected automatically")
+                    Spacer()
+                    Button("Show all items") { send(.clearAIGroupFilter) }
+                }.font(.system(size: 12)).padding(16).background(Palette.mint.opacity(0.07))
+            }
             VStack(alignment: .leading, spacing: 23) {
                 HStack(alignment: .center) {
                     PageHeading(eyebrow: "THE FINAL SAY IS YOURS", title: "You’re in control.", subtitle: "Review each item. Keep what matters.")

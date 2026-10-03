@@ -53,6 +53,7 @@ enum WorkspacePresenter {
                 canReveal: !preview, canExclude: !busy && !preview)
         }
         state.candidates = session.candidates.filter {
+            (session.aiGroupFilter == nil || session.aiGroupFilter!.candidateIDs.contains($0.id)) &&
             (session.category == nil || $0.category == session.category) &&
             (session.query.isEmpty || $0.title.localizedCaseInsensitiveContains(session.query) || $0.url.path.localizedCaseInsensitiveContains(session.query))
         }.map(row)
@@ -74,6 +75,27 @@ enum WorkspacePresenter {
         state.confirmationItems = selected.map(row)
         state.confirmationAcknowledged = session.acknowledged
         state.canConfirmCleanup = state.canReviewSelection && session.showConfirmation && session.acknowledged
+        state.claudeKeyDraft = session.claudeKeyDraft; state.hasClaudeKey = session.hasClaudeKey
+        state.claudeModel = session.claudeModel; state.isAnalyzing = session.operation == .analyzing
+        state.canAnalyze = !busy && !preview && session.hasClaudeKey && session.aiPacket != nil
+        state.canSaveClaudeKey = !busy && !preview && !session.claudeKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        state.aiGroupFilterTitle = session.aiGroupFilter?.kind
+        if let packet = session.aiPacket {
+            state.aiPayload = packet.json
+            state.aiScope = "\(packet.groups.count) groups · \(packet.omittedGroups) groups omitted · \(packet.skippedLocations) scan issues · At most \(ClaudeMessages.maxOutputTokens) output tokens"
+        }
+        if let analysis = session.aiAnalysis, let packet = session.aiPacket {
+            state.aiSummary = analysis.summary
+            state.aiUsage = analysis.cached
+                ? "Reused in memory · No new API request or tokens"
+                : "\(analysis.inputTokens) input + \(analysis.outputTokens) output tokens · \(session.claudeModel.title)"
+            state.aiAdvice = analysis.recommendations.compactMap { recommendation in
+                guard let group = packet.groups.first(where: { $0.id == recommendation.groupID }) else { return nil }
+                return AIAdviceRowState(id: group.id, title: group.kind,
+                    detail: "\(group.items) items · About \(byteLabel(group.allocatedMB * 1_000_000))\(group.scanOnly ? " · Scan only" : "")",
+                    disposition: recommendation.disposition.title, reason: recommendation.reason, caution: recommendation.caution)
+            }
+        }
         return state
     }
 }

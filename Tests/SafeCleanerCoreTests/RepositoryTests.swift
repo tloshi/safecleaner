@@ -13,6 +13,31 @@ import XCTest
             history: history, desktop: desktop ?? FakeDesktop(), validator: FakeValidator(), home: URL(fileURLWithPath: "/fixture"))
     }
 
+    func testClaudeCredentialsAreValidatedStoredSeparatelyAndNeverSentOnSave() async throws {
+        let keys = FakeAPIKeys(), advisor = FakeAdvisor(), settings = FakeSettings()
+        let repository = LocalCleaningRepository(scanner: FakeScanner(), cleaner: FakeCleaner(), disk: FakeDisk(),
+            settings: settings, history: FakeHistory(), desktop: FakeDesktop(), validator: FakeValidator(),
+            home: URL(fileURLWithPath: "/fixture"), advisor: advisor, apiKeys: keys)
+        for invalid in ["", "not-an-api-key", "sk-ant-header\r\ninjection-too-long"] {
+            do { try await repository.saveClaudeKey(invalid); XCTFail("Invalid key accepted") } catch {}
+        }
+        XCTAssertNil(keys.key)
+        try await repository.saveClaudeKey(" sk-ant-synthetic-test-key ")
+        XCTAssertEqual(keys.key, "sk-ant-synthetic-test-key")
+        XCTAssertTrue(try repository.hasClaudeKey())
+        var calls = await advisor.calls
+        XCTAssertEqual(calls, 0)
+        let packet = AIReviewPacket(candidates: [fixture()], skippedLocations: 0)
+        _ = try await repository.analyzeWithClaude(packet, model: .haiku)
+        calls = await advisor.calls; XCTAssertEqual(calls, 1)
+        try await repository.removeClaudeKey()
+        XCTAssertNil(keys.key)
+        do { _ = try await repository.analyzeWithClaude(packet, model: .haiku); XCTFail("Missing key accepted") } catch {}
+        calls = await advisor.calls; XCTAssertEqual(calls, 1)
+        let cleared = await advisor.cleared
+        XCTAssertEqual(cleared, 2)
+    }
+
     func testUnavailableHistoryBlocksCleanupWithoutOverwritingIt() async {
         let history = FakeHistory(), cleaner = FakeCleaner()
         await history.setLoadFailure()
@@ -119,6 +144,23 @@ import XCTest
         let moves = await cleaner.calls
         XCTAssertEqual(moves, 0)
     }
+}
+
+@MainActor private final class FakeAPIKeys: APIKeyStoring {
+    var key: String?
+    func hasKey() throws -> Bool { key != nil }
+    func read() throws -> String? { key }
+    func save(_ key: String) throws { self.key = key }
+    func remove() throws { key = nil }
+}
+
+private actor FakeAdvisor: ClaudeAdvising {
+    var calls = 0, cleared = 0
+    func analyze(_ packet: AIReviewPacket, model: ClaudeModel, apiKey: String) async throws -> AIAnalysis {
+        calls += 1
+        return .init(summary: "Fixture", recommendations: [], inputTokens: 1, outputTokens: 1)
+    }
+    func clearCache() { cleared += 1 }
 }
 
 private struct FakeScanner: ScanServicing {

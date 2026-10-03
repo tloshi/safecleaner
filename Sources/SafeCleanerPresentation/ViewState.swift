@@ -4,12 +4,13 @@ import SafeCleanerCore
 #endif
 
 public enum Destination: String, CaseIterable, Identifiable, Sendable {
-    case overview = "Overview", review = "Review & clean", projects = "Projects", history = "Activity", settings = "Settings"
+    case overview = "Overview", review = "Review & clean", assistant = "Claude review", projects = "Projects", history = "Activity", settings = "Settings"
     public var id: String { rawValue }
     public var symbol: String {
         switch self {
         case .overview: return "square.grid.2x2"
         case .review: return "sparkles"
+        case .assistant: return "sparkle.magnifyingglass"
         case .projects: return "folder"
         case .history: return "clock.arrow.circlepath"
         case .settings: return "slider.horizontal.3"
@@ -24,6 +25,17 @@ public enum WorkspaceAction {
     case addProjectFolder, removeProjectFolder(String), removeExclusion(String), revealHistory(UUID)
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
     case resetHistory, openFullDiskAccessSettings
+    case claudeKeyChanged(String), saveClaudeKey, removeClaudeKey, claudeModelChanged(ClaudeModel)
+    case analyzeWithClaude, cancelClaude, reviewAIGroup(String), clearAIGroupFilter
+}
+
+public struct AIAdviceRowState: Identifiable {
+    public let id: String
+    public let title: String
+    public let detail: String
+    public let disposition: String
+    public let reason: String
+    public let caution: String
 }
 
 public struct CategorySummary: Identifiable {
@@ -113,10 +125,23 @@ public struct WorkspaceViewState {
     public internal(set) var confirmationItems: [CandidateRowState] = []
     public internal(set) var confirmationAcknowledged = false
     public internal(set) var canConfirmCleanup = false
+    public internal(set) var claudeKeyDraft = ""
+    public internal(set) var hasClaudeKey = false
+    public internal(set) var claudeModel: ClaudeModel = .haiku
+    public internal(set) var isAnalyzing = false
+    public internal(set) var canAnalyze = false
+    public internal(set) var canSaveClaudeKey = false
+    public internal(set) var aiConsent = "Sends only grouped types, counts and sizes to Anthropic when you click “Send summary to Claude”. No filenames, paths or file contents. Uses your API credits."
+    public internal(set) var aiPayload = "Run a scan first."
+    public internal(set) var aiScope = ""
+    public internal(set) var aiSummary: String?
+    public internal(set) var aiUsage: String?
+    public internal(set) var aiAdvice: [AIAdviceRowState] = []
+    public internal(set) var aiGroupFilterTitle: String?
     public init() {}
 }
 
-enum Operation { case loading, idle, scanning, cleaning, choosingFolder }
+enum Operation { case loading, idle, scanning, cleaning, choosingFolder, analyzing, savingKey }
 
 struct WorkspaceSession {
     var destination: Destination = .overview
@@ -136,4 +161,10 @@ struct WorkspaceSession {
     var category: CleanCategory?
     var showConfirmation = false
     var acknowledged = false
+    var claudeKeyDraft = ""
+    var hasClaudeKey = false
+    var claudeModel: ClaudeModel = .haiku
+    var aiPacket: AIReviewPacket?
+    var aiAnalysis: AIAnalysis?
+    var aiGroupFilter: AIReviewGroup?
 }

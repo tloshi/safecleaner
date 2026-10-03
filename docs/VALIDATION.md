@@ -1,5 +1,29 @@
 # Validation
 
+## 0.4.0 — optional Claude review, 3 October 2026
+
+- Added opt-in Messages API review with Haiku 4.5 / Sonnet 5.5, Keychain credentials, a fixed
+  endpoint, no redirects, ephemeral networking, bounded grouped input and structured output.
+- **92 XCTest tests passed:** 69 core, 21 presentation, 2 service. The new tests cover payload
+  privacy and grouping limits, changed-snapshot fingerprints, rejected/truncated/unknown-ID
+  responses, scan-only restrictions, credential validation through a fake store, no requests on
+  save/start/scan, no auto-selection, cancellation, preview isolation, failure recovery and
+  request reuse without another transport call. No real API key or network request was used.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Updated generated
+  bundle version and sidebar to 0.4.0 (5); no new distribution/notarization was performed.
+- Opened the native app and checked Claude review and Settings: model picker, privacy notice,
+  payload disclosure, secure field, disabled send/save controls without a key, and readable layout.
+- Updated network/privacy copy and the privacy manifest for optional aggregate data sent under
+  the user's API account. No analytics or tracking was added.
+
+### Not performed
+
+- Live Anthropic authentication, real response generation and billing need the user's API key.
+- Keychain write/read/delete on the user's real account and behavior across signed upgrades were
+  not exercised; the implementation compiles, and repository tests use an injected fake store.
+- No cleanup was performed. The advisor uses existing scan coverage; it does not add adapters,
+  inspect file contents or establish last-use/activity facts.
+
 ## 0.3.0 — audit remediation and project build output, 19 September 2026
 
 Addresses audit items A2, A6 and A9 from `docs/analysis/AUDIT-2026-09-18.md`.

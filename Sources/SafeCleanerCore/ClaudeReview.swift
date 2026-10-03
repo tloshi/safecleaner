@@ -1,0 +1,186 @@
+import Foundation
+import CryptoKit
+
+public enum ClaudeModel: String, CaseIterable, Sendable {
+    case haiku = "claude-haiku-4-5-20251001"
+    case sonnet = "claude-sonnet-5-5"
+    public var title: String { self == .haiku ? "Haiku 4.5 · Economy" : "Sonnet 5.5 · More capable" }
+}
+
+/// Only these aggregate fields leave the device. Candidate IDs, names, paths,
+/// metadata digests, scan errors and file contents stay local.
+public struct AIReviewGroup: Encodable, Sendable {
+    public let id: String
+    public let kind: String
+    public let items: Int
+    public let allocatedMB: Int64
+    public let scanOnly: Bool
+    public let candidateIDs: [String]
+    enum CodingKeys: String, CodingKey { case id, kind, items, allocatedMB, scanOnly }
+}
+
+public struct AIReviewPacket: Sendable {
+    public static let maxGroups = 16
+    public let groups: [AIReviewGroup]
+    public let omittedGroups: Int
+    public let skippedLocations: Int
+    public let fingerprint: String
+    public let json: String
+
+    public init(candidates: [Candidate], skippedLocations: Int) {
+        // Labels come from this catalogue, never from user-controlled filenames.
+        func kind(_ c: Candidate) -> String {
+            if c.category == .projects {
+                let name = c.url.lastPathComponent
+                let known = BuildOutput.rules.contains { $0.directory == name }
+                return known ? "Project \(name)" : "Other project output"
+            }
+            if c.category == .developer {
+                let known = ["DerivedData": "Xcode DerivedData", "org.swift.swiftpm": "SwiftPM cache",
+                    "_cacache": "npm cache", "build-cache-1": "Gradle build cache", "CocoaPods": "CocoaPods cache",
+                    "downloads": "Tool downloads", "pip": "Python package cache"]
+                return known[c.url.lastPathComponent] ?? "Other developer cache"
+            }
+            return c.category.title
+        }
+        let buckets = Dictionary(grouping: candidates) { kind($0) + ($0.canTrash ? "|review" : "|scan") }
+        let sorted = buckets.sorted {
+            let lhs = $0.value.reduce(Int64(0)) { $0 + max(0, $1.bytes) }
+            let rhs = $1.value.reduce(Int64(0)) { $0 + max(0, $1.bytes) }
+            return lhs == rhs ? $0.key < $1.key : lhs > rhs
+        }
+        groups = sorted.prefix(Self.maxGroups).enumerated().map { index, bucket in
+            AIReviewGroup(id: "g\(index + 1)", kind: kind(bucket.value[0]), items: bucket.value.count,
+                allocatedMB: bucket.value.reduce(Int64(0)) { $0 + max(0, $1.bytes) } / 1_000_000,
+                scanOnly: !bucket.value[0].canTrash, candidateIDs: bucket.value.map(\.id).sorted())
+        }
+        omittedGroups = max(0, sorted.count - groups.count)
+        self.skippedLocations = max(0, skippedLocations)
+        struct Payload: Encodable {
+            let groups: [AIReviewGroup]
+            let omittedGroups: Int
+            let skippedLocations: Int
+        }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        // All values are finite integers, strings and arrays, so encoding cannot fail.
+        let data = (try? encoder.encode(Payload(groups: groups, omittedGroups: omittedGroups,
+                                              skippedLocations: self.skippedLocations))) ?? Data()
+        json = String(decoding: data, as: UTF8.self)
+        var digest = SHA256(); digest.update(data: data)
+        for c in candidates.sorted(by: { $0.id < $1.id }) {
+            digest.update(data: Data("\(c.id)\u{0}\(c.stamp.digest)\u{0}\(c.canTrash)\n".utf8))
+        }
+        fingerprint = digest.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+public enum AIDisposition: String, Codable, Sendable {
+    case review, keep, inspect
+    public var title: String {
+        switch self { case .review: return "Review first"; case .keep: return "Keep for now"; case .inspect: return "Inspect manually" }
+    }
+}
+
+public struct AIRecommendation: Codable, Sendable {
+    public let groupID: String
+    public let disposition: AIDisposition
+    public let reason: String
+    public let caution: String
+    public init(groupID: String, disposition: AIDisposition, reason: String, caution: String) {
+        self.groupID = groupID; self.disposition = disposition; self.reason = reason; self.caution = caution
+    }
+}
+
+public struct AIAnalysis: Sendable {
+    public let summary: String
+    public let recommendations: [AIRecommendation]
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public var cached: Bool
+    public init(summary: String, recommendations: [AIRecommendation], inputTokens: Int, outputTokens: Int, cached: Bool = false) {
+        self.summary = summary; self.recommendations = recommendations
+        self.inputTokens = inputTokens; self.outputTokens = outputTokens; self.cached = cached
+    }
+}
+
+public protocol ClaudeAdvising: Sendable {
+    func analyze(_ packet: AIReviewPacket, model: ClaudeModel, apiKey: String) async throws -> AIAnalysis
+    func clearCache() async
+}
+
+@MainActor public protocol APIKeyStoring {
+    func hasKey() throws -> Bool
+    func read() throws -> String?
+    func save(_ key: String) throws
+    func remove() throws
+}
+
+/// Pure wire format and validation, independently tested without making API calls.
+public enum ClaudeMessages {
+    public static let maxOutputTokens = 1200
+    public static let maxRequestBytes = 12_000
+    public static let systemPrompt = """
+    You advise on a macOS cleanup scan. Return a concise English review plan, never commands or deletion instructions.
+    Only the supplied aggregate groups exist. Their size is an allocated estimate, not guaranteed recoverable space.
+    No file contents, paths, project names, last-use dates or running-process information are available.
+    Do not invent age, disuse, safety, exact savings or evidence. A build-folder name is not proof it contains only generated data.
+    Prefer keep or inspect when evidence is insufficient. scanOnly groups must be inspect or keep.
+    Explain rebuild/download costs and the need to close owning apps and stop builds. Trash does not itself free space.
+    Rank up to 6 supplied groups by useful review priority. summary <= 500 characters; each reason and caution <= 180 characters.
+    Skipped locations and omitted groups are unassessed, not empty. Your output cannot authorize cleanup or override local protections.
+    """
+
+    public static func body(packet: AIReviewPacket, model: ClaudeModel) throws -> Data {
+        guard !packet.groups.isEmpty else { throw SafetyError.refused("Run a scan with candidates before asking Claude.") }
+        let string: [String: Any] = ["type": "string"]
+        let recommendation: [String: Any] = ["type": "object", "additionalProperties": false,
+            "properties": ["groupID": string, "disposition": ["type": "string", "enum": ["review", "keep", "inspect"]],
+                           "reason": string, "caution": string],
+            "required": ["groupID", "disposition", "reason", "caution"]]
+        let schema: [String: Any] = ["type": "object", "additionalProperties": false,
+            "properties": ["summary": string, "recommendations": ["type": "array", "items": recommendation]],
+            "required": ["summary", "recommendations"]]
+        let data = try JSONSerialization.data(withJSONObject: [
+            "model": model.rawValue, "max_tokens": maxOutputTokens, "system": systemPrompt,
+            "messages": [["role": "user", "content": packet.json]],
+            "output_config": ["format": ["type": "json_schema", "schema": schema]]
+        ], options: [.sortedKeys])
+        guard data.count <= maxRequestBytes else { throw SafetyError.refused("The AI summary exceeds the request limit.") }
+        return data
+    }
+
+    public static func decode(_ data: Data, packet: AIReviewPacket) throws -> AIAnalysis {
+        struct Envelope: Decodable {
+            struct Block: Decodable { let type: String; let text: String? }
+            struct Usage: Decodable { let input_tokens: Int; let output_tokens: Int }
+            let stop_reason: String
+            let content: [Block]
+            let usage: Usage
+        }
+        struct Plan: Decodable { let summary: String; let recommendations: [AIRecommendation] }
+        do {
+            guard data.count <= 64_000 else { throw SafetyError.refused("Oversized response") }
+            let envelope = try JSONDecoder().decode(Envelope.self, from: data)
+            guard envelope.stop_reason == "end_turn", envelope.content.count == 1,
+                  envelope.content[0].type == "text", let text = envelope.content[0].text,
+                  envelope.usage.input_tokens >= 0, envelope.usage.output_tokens >= 0 else {
+                throw SafetyError.refused("Incomplete response")
+            }
+            let plan = try JSONDecoder().decode(Plan.self, from: Data(text.utf8))
+            guard !plan.summary.isEmpty, plan.summary.count <= 600, plan.recommendations.count <= 6,
+                  Set(plan.recommendations.map(\.groupID)).count == plan.recommendations.count else {
+                throw SafetyError.refused("Invalid plan")
+            }
+            for r in plan.recommendations {
+                guard let group = packet.groups.first(where: { $0.id == r.groupID }),
+                      !r.reason.isEmpty, r.reason.count <= 240, !r.caution.isEmpty, r.caution.count <= 240,
+                      !(group.scanOnly && r.disposition == .review) else { throw SafetyError.refused("Invalid group") }
+            }
+            return AIAnalysis(summary: plan.summary, recommendations: plan.recommendations,
+                              inputTokens: envelope.usage.input_tokens, outputTokens: envelope.usage.output_tokens)
+        } catch {
+            // Never surface raw response/error bodies: they are untrusted and may echo input.
+            throw SafetyError.refused("Claude returned an incomplete or invalid plan. No selection or files were changed. A request may still have used credits.")
+        }
+    }
+}

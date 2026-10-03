@@ -3,8 +3,9 @@ import Foundation
 public struct WorkspaceSettings: Equatable, Sendable {
     public var projectRoots: [URL]
     public var exclusions: [URL]
-    public init(projectRoots: [URL] = [], exclusions: [URL] = []) {
-        self.projectRoots = projectRoots; self.exclusions = exclusions
+    public var protectedProjects: [URL]
+    public init(projectRoots: [URL] = [], exclusions: [URL] = [], protectedProjects: [URL] = []) {
+        self.projectRoots = projectRoots; self.exclusions = exclusions; self.protectedProjects = protectedProjects
     }
 }
 
@@ -70,6 +71,11 @@ public protocol ProjectRootValidating: Sendable {
 }
 
 @MainActor public protocol CleaningRepository: AnyObject {
+    func setProjectProtection(_ url: URL, protected: Bool) throws -> WorkspaceSettings
+    func hasClaudeKey() throws -> Bool
+    func saveClaudeKey(_ key: String) async throws
+    func removeClaudeKey() async throws
+    func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis
     func load() async -> WorkspaceSnapshot
     func scan(progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport
     func diskCapacity() async throws -> DiskCapacity
@@ -83,4 +89,17 @@ public protocol ProjectRootValidating: Sendable {
     func resetHistory() async throws -> [CleanupRecord]
     func reveal(_ url: URL)
     func openFullDiskAccessSettings()
+}
+
+// Optional capability so inert previews and offline repositories never construct a client.
+extension CleaningRepository {
+    public func setProjectProtection(_ url: URL, protected: Bool) throws -> WorkspaceSettings {
+        throw SafetyError.refused("Project protection is unavailable in this workspace.")
+    }
+    public func hasClaudeKey() throws -> Bool { false }
+    public func saveClaudeKey(_ key: String) async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }
+    public func removeClaudeKey() async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }
+    public func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis {
+        throw SafetyError.refused("Claude is unavailable in this workspace.")
+    }
 }

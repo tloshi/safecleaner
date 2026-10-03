@@ -10,6 +10,8 @@ import Foundation
     private let desktop: any DesktopInteracting
     private let validator: any ProjectRootValidating
     private let home: URL
+    private let advisor: (any ClaudeAdvising)?
+    private let apiKeys: (any APIKeyStoring)?
     private var settings = WorkspaceSettings()
     private var history: [CleanupRecord] = []
     private var historyAvailable = false
@@ -18,10 +20,35 @@ import Foundation
     public init(scanner: any ScanServicing, cleaner: any CleanupServicing,
                 disk: any DiskInfoProviding, settings: any SettingsStoring,
                 history: any HistoryStoring, desktop: any DesktopInteracting,
-                validator: any ProjectRootValidating, home: URL) {
+                validator: any ProjectRootValidating, home: URL,
+                advisor: (any ClaudeAdvising)? = nil, apiKeys: (any APIKeyStoring)? = nil) {
         self.scanner = scanner; self.cleaner = cleaner; self.disk = disk
         self.settingsStore = settings; self.historyStore = history
         self.desktop = desktop; self.validator = validator; self.home = home
+        self.advisor = advisor; self.apiKeys = apiKeys
+    }
+
+    public func hasClaudeKey() throws -> Bool { try apiKeys?.hasKey() ?? false }
+    public func saveClaudeKey(_ key: String) async throws {
+        guard let apiKeys else { throw SafetyError.refused("Claude is unavailable in this workspace.") }
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("sk-ant-"), (20...512).contains(trimmed.utf8.count),
+              trimmed.utf8.allSatisfy({ $0 > 32 && $0 < 127 }) else {
+            throw SafetyError.refused("Enter a valid Anthropic API key beginning with sk-ant-.")
+        }
+        try apiKeys.save(trimmed)
+        await advisor?.clearCache()
+    }
+    public func removeClaudeKey() async throws {
+        guard let apiKeys else { return }
+        try apiKeys.remove()
+        await advisor?.clearCache()
+    }
+    public func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis {
+        guard let advisor, let key = try apiKeys?.read(), !key.isEmpty else {
+            throw SafetyError.refused("Save your Anthropic API key in Settings first.")
+        }
+        return try await advisor.analyze(packet, model: model, apiKey: key)
     }
 
     public func load() async -> WorkspaceSnapshot {
@@ -37,7 +64,8 @@ import Foundation
     }
 
     public func scan(progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport {
-        try await scanner.scan(configuration: .init(home: home, projectRoots: settings.projectRoots, exclusions: settings.exclusions), progress: progress)
+        try await scanner.scan(configuration: .init(home: home, projectRoots: settings.projectRoots,
+            exclusions: settings.exclusions + settings.protectedProjects), progress: progress)
     }
     public func diskCapacity() async throws -> DiskCapacity { try await disk.capacity() }
 
@@ -65,6 +93,19 @@ import Foundation
         updated.exclusions.removeAll { $0 == url }
         return try persist(updated)
     }
+    public func setProjectProtection(_ url: URL, protected: Bool) throws -> WorkspaceSettings {
+        guard !cleaning else { throw SafetyError.refused("Wait for cleanup to finish before changing project protection.") }
+        var updated = settings
+        let path = url.standardized
+        if protected {
+            try validator.validate(path)
+            guard settings.projectRoots.contains(where: { path == $0.standardized || FileSafety.isInside(path, root: $0) }) else {
+                throw SafetyError.refused("Choose a project inside one of your project folders.")
+            }
+            if !updated.protectedProjects.contains(path) { updated.protectedProjects.append(path) }
+        } else { updated.protectedProjects.removeAll { $0.standardized == path } }
+        return try persist(updated)
+    }
     private func persist(_ updated: WorkspaceSettings) throws -> WorkspaceSettings {
         try settingsStore.save(updated)
         settings = updated
@@ -87,7 +128,7 @@ import Foundation
             throw SafetyError.refused("Close the related apps first: " + blocked.map(\.title).joined(separator: ", "))
         }
         for item in items {
-            guard !settings.exclusions.contains(where: {
+            guard !(settings.exclusions + settings.protectedProjects).contains(where: {
                 $0.standardized == item.url.standardized || FileSafety.isInside(item.url, root: $0) || FileSafety.isInside($0, root: item.url)
             }) else { throw SafetyError.refused("An item contains or belongs to an excluded location. Scan again.") }
         }

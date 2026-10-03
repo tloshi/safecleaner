@@ -17,6 +17,91 @@ import SafeCleanerCore
         return (vm, repository)
     }
 
+    func testClaudeRequiresKeyAndExplicitActionAndNeverSelectsOrCleans() async {
+        let candidate = fixture()
+        let (vm, repository) = await ready([candidate])
+        XCTAssertEqual(repository.aiCalls, 0)
+        XCTAssertFalse(vm.state.canAnalyze)
+        XCTAssertNil(vm.send(.analyzeWithClaude))
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key"))
+        await vm.send(.saveClaudeKey)?.value
+        XCTAssertTrue(vm.state.hasClaudeKey)
+        XCTAssertTrue(vm.state.claudeKeyDraft.isEmpty)
+        XCTAssertEqual(repository.aiCalls, 0)
+        await vm.send(.analyzeWithClaude)?.value
+        XCTAssertEqual(repository.aiCalls, 1)
+        XCTAssertEqual(vm.state.aiAdvice.count, 1)
+        vm.send(.reviewAIGroup("g1"))
+        XCTAssertEqual(vm.state.destination, .review)
+        XCTAssertNotNil(vm.state.aiGroupFilterTitle)
+        XCTAssertFalse(vm.state.canReviewSelection)
+        XCTAssertEqual(repository.cleanCalls, 0)
+    }
+
+    func testClaudeFailurePreservesManualSelectionAndRecoversControls() async {
+        let candidate = fixture()
+        let (vm, repository) = await ready([candidate])
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); await vm.send(.saveClaudeKey)?.value
+        vm.send(.toggleCandidate(candidate.id))
+        repository.aiError = SafetyError.refused("No credits")
+        await vm.send(.analyzeWithClaude)?.value
+        XCTAssertEqual(vm.state.message, "No credits")
+        XCTAssertTrue(vm.state.candidates[0].isSelected)
+        XCTAssertTrue(vm.state.canAnalyze)
+        XCTAssertNil(vm.state.aiSummary)
+    }
+
+    func testClaudeCancellationAndBusyGuardPreventDuplicateCalls() async {
+        let (vm, repository) = await ready([fixture()])
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); await vm.send(.saveClaudeKey)?.value
+        repository.delayAI = true
+        let task = vm.send(.analyzeWithClaude)
+        XCTAssertTrue(vm.state.isAnalyzing)
+        XCTAssertNil(vm.send(.analyzeWithClaude))
+        XCTAssertNil(vm.send(.scan))
+        vm.send(.cancelClaude); await task?.value
+        XCTAssertFalse(vm.state.isBusy)
+        XCTAssertNil(vm.state.aiSummary)
+        XCTAssertTrue(vm.state.message?.contains("cancelled") == true)
+    }
+
+    func testNewScanAndExclusionInvalidateClaudePlan() async {
+        let candidate = fixture()
+        let (vm, _) = await ready([candidate])
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); await vm.send(.saveClaudeKey)?.value
+        await vm.send(.analyzeWithClaude)?.value
+        XCTAssertNotNil(vm.state.aiSummary)
+        await vm.send(.scan)?.value
+        XCTAssertNil(vm.state.aiSummary)
+        await vm.send(.analyzeWithClaude)?.value
+        vm.send(.excludeCandidate(candidate.id))
+        XCTAssertNil(vm.state.aiSummary)
+        XCTAssertFalse(vm.state.canAnalyze)
+    }
+
+    func testKeyDraftClearsOnNavigationAndFailedSaveDoesNotClaimSuccess() async {
+        let (vm, repository) = await ready([fixture()])
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); vm.send(.navigate(.overview))
+        XCTAssertTrue(vm.state.claudeKeyDraft.isEmpty)
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key"))
+        repository.keyError = SafetyError.refused("Keychain locked")
+        await vm.send(.saveClaudeKey)?.value
+        XCTAssertFalse(vm.state.hasClaudeKey)
+        XCTAssertTrue(vm.state.claudeKeyDraft.isEmpty)
+        XCTAssertEqual(vm.state.message, "Keychain locked")
+    }
+
+    func testPreviewCannotUseClaudeOrKeychain() async {
+        let repository = FakeRepository(); repository.hasKey = true
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "test",
+                                    previewReport: .init(candidates: [fixture()]))
+        await vm.start()
+        for action: WorkspaceAction in [.claudeKeyChanged("sk-ant-synthetic-test-key"), .saveClaudeKey, .removeClaudeKey, .analyzeWithClaude] {
+            await vm.send(action)?.value
+        }
+        XCTAssertEqual(repository.aiCalls + repository.keyReads + repository.keyWrites, 0)
+    }
+
     /// A history the build cannot read pauses cleanup. The view needs a flag, not just the
     /// notice text, or there is nothing to attach a recovery control to.
     func testUnreadableHistoryOffersReset() async {
@@ -217,6 +302,23 @@ import SafeCleanerCore
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {
+    var hasKey = false, delayAI = false
+    var aiCalls = 0, keyReads = 0, keyWrites = 0
+    var aiError: Error?, keyError: Error?
+    func hasClaudeKey() throws -> Bool { keyReads += 1; return hasKey }
+    func saveClaudeKey(_ key: String) async throws {
+        if let keyError { throw keyError }
+        keyWrites += 1; hasKey = true
+    }
+    func removeClaudeKey() async throws { keyWrites += 1; hasKey = false }
+    func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis {
+        aiCalls += 1
+        if let aiError { throw aiError }
+        if delayAI { try await Task.sleep(nanoseconds: 60_000_000_000) }
+        return .init(summary: "Review this cache.", recommendations: [
+            .init(groupID: packet.groups[0].id, disposition: .review, reason: "Cache", caution: "Stop builds")
+        ], inputTokens: 500, outputTokens: 80)
+    }
     var loads = 0, scans = 0, cleanCalls = 0, settingsWrites = 0, reveals = 0, resetCalls = 0, settingsOpens = 0
     var cleanedIDs: [String] = []
     var settings = WorkspaceSettings()

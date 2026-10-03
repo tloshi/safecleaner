@@ -140,6 +140,15 @@ public struct DiskScanner: Sendable {
                     do { children = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey]) }
                     catch { report.issues.append(.init(path: directory.path, message: error.localizedDescription)); continue }
                     let names = Set(children.map(\.lastPathComponent))
+                    let manifests = Set(BuildOutput.rules.flatMap(\.manifests))
+                        .union(["pyproject.toml", "requirements.txt", "setup.py", "go.mod", "Gemfile"])
+                    if names.contains(".git") || !names.isDisjoint(with: manifests)
+                        || names.contains(where: { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }) {
+                        if !report.projects.contains(where: { $0 == directory || FileSafety.isInside(directory, root: $0) }) {
+                            report.projects.removeAll { FileSafety.isInside($0, root: directory) }
+                            report.projects.append(directory)
+                        }
+                    }
                     for child in children {
                         guard !excluded(child) else { continue }
                         let values: URLResourceValues
@@ -173,6 +182,7 @@ public struct DiskScanner: Sendable {
             catch { report.issues.append(.init(path: root.path, message: error.localizedDescription)) }
         }
         report.candidates.sort { $0.bytes > $1.bytes }
+        report.projects.sort { $0.path < $1.path }
         report.finishedAt = Date()
         return report
     }

@@ -2,7 +2,7 @@
 
 A personal, native macOS cleaner. Understand disk usage, review every candidate, and move selected caches to Trash.
 
-**macOS 14+ · Swift / SwiftUI · No third-party packages · No network service**
+**macOS 14+ · Swift / SwiftUI · No third-party packages · Optional Claude API review**
 
 ## Start
 
@@ -153,8 +153,7 @@ The app does not check for, announce or install updates, and nothing here publis
 Anyone given a disk image stays on that build until they are handed another one by hand. For a tool
 whose worst failure is moving a file someone needed, that means a safety fix currently has no
 delivery path. Closing it means either a version check that reports a newer release, or Sparkle for
-real in-app updates — and either one adds an outbound network request, so the "no network requests
-or telemetry" claim in this README and in the app's own About text has to change with it.
+real in-app updates. Update checks would be a separate network feature from the optional Claude review.
 
 ## What works in 0.2
 
@@ -170,6 +169,20 @@ or telemetry" claim in this README and in the app's own About text has to change
 - Revalidation of the tree before Trash; no permanent-delete fallback.
 - Persistent local cleanup history with Finder links. Restore uses Finder’s Trash; no automated restore yet.
 - Clearly reported skipped locations, partial project scans and failures.
+
+## Claude review (0.4)
+
+1. In **Settings → Claude**, paste your Anthropic API key and choose **Save to Keychain**.
+2. Run a normal scan, then open **Claude review**.
+3. Use Haiku 4.5 for economy, or choose Sonnet 5.5. Preview the exact scan-data payload, then click **Send summary to Claude**.
+4. Review the advice and actual token usage. **Review these items** filters the local list; it does not select, delete or authorize anything.
+
+There is one bounded request, at most 16 aggregate groups, a 12 KB application request-body cap,
+and a 1,200-token output cap. There are no tool calls, chat history, automatic retries or model
+fallbacks. The most recent unchanged analysis is reused in memory; quitting clears that cache.
+The byte cap is not an exact input-token or dollar limit: Anthropic adds structured-output overhead.
+The API account controls spending limits. No paid request is made just by saving a key or scanning.
+See [Claude integration](docs/CLAUDE.md) for the privacy boundary, sources and limitations.
 
 ## Architecture and motion
 
@@ -198,7 +211,7 @@ Allocated bytes are an estimate. APFS sharing, snapshots, compression and Trash 
 
 - Settings: app-scoped UserDefaults (`com.loshi.safecleaner` in the app bundle).
 - Activity: `~/Library/Application Support/SafeCleaner/history.json`.
-- No analytics, telemetry, remote classification or automatic file uploads.
+- No analytics, telemetry or automatic uploads. Optional Claude review sends grouped scan statistics directly to Anthropic only after an explicit action. API keys live in macOS Keychain; paths and file contents stay local.
 - No automatic scan, automatic cleanup or launch agent.
 - macOS permissions and SIP are respected. Missing access is visible in results; Full Disk Access is not automatically granted or required blindly.
 

@@ -36,6 +36,7 @@ struct ContentView: View {
                         switch state.destination {
                         case .overview: OverviewView(state: state, send: send)
                         case .review: ReviewView(state: state, send: send)
+                        case .assistant: ClaudeReviewView(state: state, send: send)
                         case .projects: ProjectsView(state: state, send: send)
                         case .history: ActivityView(state: state, send: send)
                         case .settings: SettingsView(state: state, send: send)
@@ -98,7 +99,7 @@ struct ContentView: View {
                 Image(systemName: "shield.lefthalf.filled").foregroundStyle(Palette.mint).font(.system(size: 19, weight: .light))
                 Text("A lighter Mac.\nA little more peace of mind.").font(.system(size: 12, weight: .medium)).lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Local scans. No account.\nNothing leaves your Mac.").font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(4)
+                Text("Local scans.\nOptional Claude review.").font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
             }.padding(17).frame(maxWidth: .infinity, alignment: .leading)
                 .background(LinearGradient(colors: [Palette.mint.opacity(0.045), .clear], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 16))
@@ -107,7 +108,7 @@ struct ContentView: View {
                 Circle().fill(Palette.mint).frame(width: 5, height: 5)
                 Text("PERSONAL EDITION").tracking(1.2)
                 Spacer()
-                Text("0.2")
+                Text(state.version)
             }.font(.system(size: 9, weight: .medium)).foregroundStyle(Palette.muted).padding(.top, 20).padding(.bottom, 22)
         }.padding(.horizontal, 18).frame(width: 231).background(Palette.sidebar)
     }
@@ -118,7 +119,7 @@ struct ContentView: View {
             Text("/").foregroundStyle(Palette.muted.opacity(0.5)).padding(.horizontal, 7)
             Text(state.destination.rawValue).id(state.destination).transition(.opacity)
             Spacer()
-            Label("On-device", systemImage: "lock.shield").foregroundStyle(Palette.muted)
+            Label("Local scan · Optional AI", systemImage: "lock.shield").foregroundStyle(Palette.muted)
             Circle().fill(Palette.mint).frame(width: 6, height: 6).padding(.leading, 14)
         }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 32).frame(height: 67)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 1) }
