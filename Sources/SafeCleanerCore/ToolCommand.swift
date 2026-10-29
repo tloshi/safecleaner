@@ -37,6 +37,7 @@ public struct ToolCommand: Sendable, Equatable {
 
     public enum ToolError: LocalizedError, Equatable {
         case notAllowed(String)
+        case invalidArgument(String)
         case missing(String)
         case notExecutable(String)
         case writableByOthers(String)
@@ -46,6 +47,7 @@ public struct ToolCommand: Sendable, Equatable {
         public var errorDescription: String? {
             switch self {
             case .notAllowed(let p): return "\(p) is not an allowed tool."
+            case .invalidArgument(let a): return "\(a) is not a valid simulator identifier, so no command was run."
             case .missing(let p): return "\(p) is not installed."
             case .notExecutable(let p): return "\(p) is not executable."
             case .writableByOthers(let p):
@@ -98,6 +100,26 @@ public struct ToolCommand: Sendable, Equatable {
         static let brewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]
 
         // Simulator runtimes: the largest tool-managed item on a developer Mac.
+        /// A placeholder so the structural tests see the shape of the parameterized commands.
+        static let sampleUUID = "00000000-0000-0000-0000-000000000000"
+
+        public static func simulatorRuntimeList() -> ToolCommand { .init(xcrun, ["simctl", "runtime", "list", "-j"]) }
+        public static func simulatorDeviceList() -> ToolCommand { .init(xcrun, ["simctl", "list", "devices", "-j"]) }
+        /// Per-item removal. The identifier is the only argument a scan result ever contributes,
+        /// and it must be a UUID that simctl itself reported; anything else is refused here.
+        public static func simulatorRuntimeDelete(identifier: String) throws -> ToolCommand {
+            .init(xcrun, ["simctl", "runtime", "delete", try uuid(identifier)])
+        }
+        public static func simulatorDeviceDelete(udid: String) throws -> ToolCommand {
+            .init(xcrun, ["simctl", "delete", try uuid(udid)])
+        }
+        static func uuid(_ value: String) throws -> String {
+            guard value.count == 36, let parsed = UUID(uuidString: value) else {
+                throw ToolError.invalidArgument(String(value.prefix(60)))
+            }
+            return parsed.uuidString
+        }
+
         static func simulatorRuntimesPreview() -> ToolCommand {
             .init(xcrun, ["simctl", "runtime", "delete", "--notUsedSinceDays", "30", "--dry-run"])
         }
@@ -118,7 +140,10 @@ public struct ToolCommand: Sendable, Equatable {
         /// Every command that may ever run, for `validateExecutable` to check against.
         static var every: [ToolCommand] {
             var all = [simulatorRuntimesPreview(), simulatorRuntimesApply(),
-                       unavailableDevicesPreview(), unavailableDevicesApply()]
+                       unavailableDevicesPreview(), unavailableDevicesApply(),
+                       simulatorRuntimeList(), simulatorDeviceList()]
+            if let runtime = try? simulatorRuntimeDelete(identifier: sampleUUID),
+               let device = try? simulatorDeviceDelete(udid: sampleUUID) { all += [runtime, device] }
             all += dockerPaths.flatMap { [dockerPreview($0), dockerApply($0)] }
             all += brewPaths.flatMap { [brewPreview($0), brewApply($0)] }
             return all

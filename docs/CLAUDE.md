@@ -8,7 +8,7 @@ exclusions, running-owner and snapshot checks still govern every Trash operation
 
 The app sends one compact summary directly to `https://api.anthropic.com/v1/messages` when the
 user clicks **Send summary to Claude**. The preview shows all scan-derived fields that leave:
-fixed group types, anonymous group IDs, item counts, rounded-down allocated MB, scan-only status,
+fixed group types (category titles such as “Simulators”, or known cache names), anonymous group IDs, item counts, rounded-down allocated MB, scan-only status,
 and counts of omitted groups and scan issues. The fixed instructions and response schema are also
 part of the request. No filenames, paths, project names, file contents, scan error messages,
 owner IDs or metadata hashes are sent. Claude's reply is untrusted plain text, never executable.

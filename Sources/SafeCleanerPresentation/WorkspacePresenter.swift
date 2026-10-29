@@ -30,7 +30,11 @@ enum WorkspacePresenter {
         if state.hasScanned { state.foundCaption = "\(session.candidates.count) candidates · You choose what goes" }
         state.scanDate = session.lastScan.map { "Scanned \($0.formatted(date: .omitted, time: .shortened))" } ?? "Awaiting first scan"
         state.selectedSize = byteLabel(selectedBytes); state.selectedValue = Double(selectedBytes)
-        state.selectionCaption = "\(selected.count) \(selected.count == 1 ? "item" : "items") · Moves to Trash, not permanent deletion"
+        let toolItems = selected.filter { $0.removal != nil }
+        let count = "\(selected.count) \(selected.count == 1 ? "item" : "items")"
+        state.selectionCaption = toolItems.isEmpty ? "\(count) · Moves to Trash, not permanent deletion"
+            : toolItems.count == selected.count ? "\(count) · Removed by xcrun simctl · Permanent, not Trash"
+            : "\(count) · \(toolItems.count) removed by simctl (permanent), the rest move to Trash"
         state.categories = CleanCategory.allCases.map { category in
             let items = session.candidates.filter { $0.category == category }
             let bytes = items.reduce(Int64(0)) { $0 + $1.bytes }
@@ -46,9 +50,11 @@ enum WorkspacePresenter {
         func row(_ item: Candidate) -> CandidateRowState {
             let abbreviated = item.url.path.hasPrefix(homePath + "/") ? "~" + item.url.path.dropFirst(homePath.count) : item.url.path
             return CandidateRowState(id: item.id, title: item.title, path: abbreviated, fullPath: item.url.path, size: byteLabel(item.bytes),
-                category: item.category, badge: item.canTrash ? "Review first" : "Scan only", reason: item.reason,
-                consequence: item.consequence,
-                metadata: "\(item.stamp.fileCount) files · \(byteLabel(item.stamp.logicalBytes)) logical · \(byteLabel(item.bytes)) allocated estimate",
+                category: item.category, badge: item.removal != nil ? "Tool removal" : item.canTrash ? "Review first" : "Scan only",
+                reason: item.reason, consequence: item.consequence,
+                metadata: item.removal != nil
+                    ? "Tool-managed · \(byteLabel(item.bytes)) reported by xcrun simctl · Removed by simctl, not Trash"
+                    : "\(item.stamp.fileCount) files · \(byteLabel(item.stamp.logicalBytes)) logical · \(byteLabel(item.bytes)) allocated estimate",
                 isSelected: session.selected.contains(item.id), canSelect: item.canTrash && !busy && !preview,
                 canReveal: !preview, canExclude: !busy && !preview)
         }
@@ -82,7 +88,9 @@ enum WorkspacePresenter {
         state.history = session.records.map { record in
             HistoryRowState(id: record.id, title: URL(fileURLWithPath: record.originalPath).lastPathComponent,
                 path: record.originalPath, date: record.date.formatted(date: .abbreviated, time: .shortened),
-                result: record.error ?? "Moved to Trash · \(byteLabel(record.bytes)) · Space not yet reclaimed",
+                result: record.error ?? (record.isToolRemoval
+                    ? "Removed by xcrun simctl · \(byteLabel(record.bytes)) · Space freed, nothing in Trash"
+                    : "Moved to Trash · \(byteLabel(record.bytes)) · Space not yet reclaimed"),
                 failed: record.error != nil, canReveal: record.trashPath != nil && !preview)
         }
         state.historyNeedsReset = !session.historyAvailable
@@ -91,6 +99,8 @@ enum WorkspacePresenter {
         state.noProjectRootsYet = session.settings.projectRoots.isEmpty
         state.showConfirmation = session.showConfirmation
         state.confirmationItems = selected.map(row)
+        (state.confirmationTitle, state.confirmationDetail, state.confirmButtonTitle, state.confirmationToolNote)
+            = confirmation(selected: selected, toolItems: toolItems, size: state.selectedSize)
         state.confirmationAcknowledged = session.acknowledged
         state.canConfirmCleanup = state.canReviewSelection && session.showConfirmation && session.acknowledged
         state.showCleanupSheet = state.showConfirmation || state.isCleaning || state.cleanupResult != nil
@@ -166,6 +176,25 @@ enum WorkspacePresenter {
             return session.lastScan == nil ? "Scan first. Claude reviews the grouped scan results." : "The last scan found nothing to review."
         }
         return nil
+    }
+
+    private static func confirmation(selected: [Candidate], toolItems: [Candidate], size: String) -> (String, String, String, String?) {
+        let toolBytes = byteLabel(toolItems.reduce(Int64(0)) { $0 + $1.bytes })
+        let toolCount = "\(toolItems.count) \(toolItems.count == 1 ? "item" : "items")"
+        if toolItems.isEmpty {
+            return ("Move \(size) to Trash?",
+                    "These exact items will move to Trash. You can restore them in Finder until the Trash is emptied.",
+                    "Move to Trash", nil)
+        }
+        let note = "\(toolCount) (\(toolBytes)) are simulator runtimes or devices. xcrun simctl removes them permanently: they never reach Trash and cannot be restored. Xcode can download a runtime or create a device again."
+        if toolItems.count == selected.count {
+            return ("Remove \(size) with simctl?",
+                    "These exact simulator items will be removed by Xcode's simctl. Each is re-checked first and left in place if it was used since the scan.",
+                    "Remove with simctl", note)
+        }
+        return ("Move \(size) to Trash and remove simulators?",
+                "Files move to Trash, where you can restore them in Finder. Simulator items are removed by Xcode's simctl.",
+                "Move to Trash and remove", note)
     }
 
     private static func busyStatus(_ session: WorkspaceSession) -> String? {

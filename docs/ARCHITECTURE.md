@@ -82,6 +82,22 @@ Before adding a cleanable location:
 Never add a broad `find … -name build -delete`, blanket library cleanup, or shell command assembled from a user-provided path.
 
 
+## Tool-managed removals (0.5)
+
+Some stores are owned by a tool and must be removed by it, never by a Trash move: simulator
+runtimes are root-owned disk images and simulator devices are registered with CoreSimulator.
+`Candidate.removal` marks such an item; the row, the selection caption, the confirmation sheet
+and the Activity list all say it is permanent. `ToolCommand` in Core holds the only commands
+that can run (a catalogue with a private initializer); the per-item deletes take one argument,
+a UUID that simctl itself reported, re-validated before it becomes an argument.
+`ToolRunner` in Services is the one place a process is launched: validated executable, minimal
+environment, no stdin, hard timeout, terminated on cancellation. The scan pass
+(`SimulatorScan`) runs two read-only list commands and `SimulatorRules` decides what may be
+offered; the removal (`SimulatorRemover`) re-lists immediately before each delete and leaves
+an item in place if it no longer qualifies, mirroring the snapshot check on the Trash path.
+`LocalCleaningRepository.clean` dispatches by `removal`; `CleanupEngine` refuses tool-managed
+items outright. Histories record `method: tool`; older files decode with the field absent.
+
 ## Optional Claude review (0.4)
 
 `AIReviewPacket` in Core groups candidates using a fixed label catalogue. The encoded payload

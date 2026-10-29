@@ -4,15 +4,25 @@ import SafeCleanerCore
 #endif
 
 struct LocalScanService: ScanServicing {
+    /// Optional so a workspace without Xcode, or a test, scans the filesystem alone.
+    var simulators: SimulatorScan?
     func scan(configuration: ScanConfiguration, progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport {
         let worker = Task.detached(priority: .userInitiated) {
             try DiskScanner().scan(configuration: configuration, progress: progress)
         }
-        return try await withTaskCancellationHandler {
+        var report = try await withTaskCancellationHandler {
             let report = try await worker.value
             try Task.checkCancellation()
             return report
         } onCancel: { worker.cancel() }
+        if let simulators {
+            progress("Simulator runtimes and devices")
+            let extra = await simulators.run(exclusions: configuration.exclusions)
+            try Task.checkCancellation()
+            report.candidates += extra.candidates
+            report.issues += extra.issues
+        }
+        return report
     }
 }
 

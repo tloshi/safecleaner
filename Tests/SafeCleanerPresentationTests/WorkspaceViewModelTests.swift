@@ -159,6 +159,45 @@ import SafeCleanerCore
         XCTAssertNotNil(vm.state.aiSummary)
     }
 
+    /// Simulator items are removed by simctl, not Trash. Every surface the user reads before
+    /// and after a cleanup has to say so, or “Move to Trash” would be a lie.
+    func testToolManagedItemsAreExplainedAsPermanentBeforeAndAfterCleanup() async {
+        let sim = Candidate(url: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS-26-2"), title: "iOS 26.2 simulator runtime",
+            category: .simulators, reason: "Last used 45 days ago.", consequence: "Removed permanently by xcrun simctl.",
+            stamp: .init(digest: "simctl", logicalBytes: 8_000, allocatedBytes: 8_000, fileCount: 0),
+            allowedRoot: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes"), canTrash: true,
+            ownerBundleID: "com.apple.iphonesimulator", removal: .simulatorRuntime(identifier: "7108F245-A808-4DA6-BB9B-C870AA12AF8B"))
+        let file = fixture()
+        let (vm, repository) = await ready([sim, file])
+        let row = vm.state.candidates.first { $0.id == sim.id }
+        XCTAssertEqual(row?.badge, "Tool removal")
+        XCTAssertTrue(row?.metadata.contains("not Trash") == true, row?.metadata ?? "")
+        XCTAssertEqual(vm.state.categories.first { $0.category == .simulators }?.count, "1 item")
+        vm.send(.toggleCandidate(sim.id))
+        XCTAssertTrue(vm.state.selectionCaption.contains("Permanent"), vm.state.selectionCaption)
+        XCTAssertEqual(vm.state.confirmButtonTitle, "Remove with simctl")
+        XCTAssertNotNil(vm.state.confirmationToolNote)
+        vm.send(.toggleCandidate(file.id))
+        XCTAssertEqual(vm.state.confirmButtonTitle, "Move to Trash and remove")
+        XCTAssertTrue(vm.state.selectionCaption.contains("1 removed by simctl"), vm.state.selectionCaption)
+        vm.send(.toggleCandidate(sim.id))
+        XCTAssertEqual(vm.state.confirmButtonTitle, "Move to Trash")
+        XCTAssertNil(vm.state.confirmationToolNote)
+        vm.send(.toggleCandidate(sim.id))
+        let removed = CleanupRecord(originalPath: sim.id, trashPath: nil, bytes: sim.bytes, error: nil, method: .tool)
+        let trashed = CleanupRecord(originalPath: file.id, trashPath: "/synthetic-trash/item", bytes: file.bytes, error: nil)
+        repository.cleanupResult = .init(records: [removed, trashed], history: [removed, trashed])
+        vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        await vm.send(.confirmCleanup)?.value
+        XCTAssertEqual(vm.state.cleanupResult?.title, "1 moved to Trash · 1 removed with simctl")
+        XCTAssertTrue(vm.state.cleanupResult?.subtitle.contains("freed by simctl") == true, vm.state.cleanupResult?.subtitle ?? "")
+        XCTAssertTrue(vm.state.message?.contains("removed with simctl") == true, vm.state.message ?? "")
+        XCTAssertEqual(vm.state.history.count, 2)
+        XCTAssertTrue(vm.state.history[0].result.contains("Removed by xcrun simctl"), vm.state.history[0].result)
+        XCTAssertFalse(vm.state.history[0].canReveal, "nothing in Trash to show")
+        XCTAssertTrue(vm.state.history[1].result.contains("Moved to Trash"), vm.state.history[1].result)
+    }
+
     func testOpeningSettingsOrClaudeReviewNoticesKeysChangedOutsideTheApp() async {
         let repository = FakeRepository()
         let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
@@ -245,7 +284,7 @@ import SafeCleanerCore
         XCTAssertEqual(repository.scans, 0)
         XCTAssertTrue(vm.state.canScan)
         XCTAssertEqual(vm.state.diskFraction, 0.8, accuracy: 0.001)
-        XCTAssertEqual(vm.state.categories.count, 5)
+        XCTAssertEqual(vm.state.categories.count, CleanCategory.allCases.count)
     }
 
     func testScanBeginsWithNothingSelectedAndRejectsScanOnlyItems() async {

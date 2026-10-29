@@ -17,6 +17,20 @@ final class ToolCommandTests: XCTestCase {
         }
     }
 
+    /// A simulator identifier is the only argument a scan result ever contributes to a
+    /// command, and it must be a UUID simctl reported. Anything else never becomes a command.
+    func testSimulatorIdentifiersMustBeUUIDsBeforeTheyBecomeArguments() throws {
+        let runtime = try ToolCommand.Catalogue.simulatorRuntimeDelete(identifier: "41d370ab-06ee-4ae4-900b-b0f42bf7cfc9")
+        XCTAssertEqual(runtime.arguments, ["simctl", "runtime", "delete", "41D370AB-06EE-4AE4-900B-B0F42BF7CFC9"])
+        XCTAssertEqual(runtime.executable, "/usr/bin/xcrun")
+        for bad in ["", "unavailable", "all", "41D370AB-06EE-4AE4-900B-B0F42BF7CFC9 --all", "; rm -rf ~",
+                    "41D370AB-06EE-4AE4-900B-B0F42BF7CFC9\n", "--notUsedSinceDays"] {
+            XCTAssertThrowsError(try ToolCommand.Catalogue.simulatorDeviceDelete(udid: bad), bad) {
+                XCTAssertEqual($0 as? ToolCommand.ToolError, .invalidArgument(String(bad.prefix(60))))
+            }
+        }
+    }
+
     func testNoCommandInvokesAShell() {
         for command in ToolCommand.Catalogue.every {
             XCTAssertFalse(ToolCommand.forbidden.contains(command.executable),

@@ -167,6 +167,11 @@ public struct WorkspaceViewState {
     public internal(set) var needsFullDiskAccess = false
     public internal(set) var noProjectRootsYet = false
     public internal(set) var showConfirmation = false
+    public internal(set) var confirmationTitle = ""
+    public internal(set) var confirmationDetail = ""
+    public internal(set) var confirmButtonTitle = "Move to Trash"
+    /// Present when the selection includes tool-managed items, which are removed permanently.
+    public internal(set) var confirmationToolNote: String?
     public internal(set) var confirmationItems: [CandidateRowState] = []
     public internal(set) var confirmationAcknowledged = false
     public internal(set) var canConfirmCleanup = false

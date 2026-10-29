@@ -134,6 +134,9 @@ public struct CleanupEngine {
             guard candidate.canTrash else {
                 throw SafetyError.refused("This category is scan-only in this release.")
             }
+            guard candidate.removal == nil else {
+                throw SafetyError.refused("Tool-managed items are removed by their tool, not moved to Trash.")
+            }
             let current = try FileSafety.snapshot(candidate.url, root: candidate.allowedRoot)
             guard current == candidate.stamp else { throw SafetyError.changedSinceScan }
             // Recheck the root chain immediately before moving. This is best-effort

@@ -50,6 +50,39 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.0 — simulator runtimes and devices via simctl, 30 October 2026
+
+- First tool-managed adapter. The scan runs `xcrun simctl runtime list -j` and
+  `xcrun simctl list devices -j` through `ToolRunner`, the only place the app launches a
+  process (validated executable from the `ToolCommand` catalogue, minimal environment, no
+  stdin, 120 s timeout, terminated on cancellation). Offered only: deletable runtimes that are
+  not the newest for their platform, unused for 30 days, with no booted or recently used
+  device; shut-down, available devices with data, unused for 30 days. Removal is
+  `simctl runtime delete <uuid>` / `simctl delete <udid>` one item at a time, after a fresh
+  inventory; an item used since the scan is left in place as “changed”. The identifier is the
+  only scan-derived argument and is re-validated as a UUID. Simulator.app open keeps all of
+  them in place. Row, selection caption, confirmation sheet, result and Activity all state
+  that these removals are permanent and never reach Trash.
+- **159 XCTest tests passed:** 102 core, 52 presentation, 5 service. New tests cover parsing,
+  every guard (newest, recent, non-deletable, single-platform, busy runtime, booted device,
+  zero size, unavailable, 29 vs 31 days), the exact command sequence, the re-check refusing a
+  changed item, forged identifiers never reaching a command, tool failures, scan quietness
+  without Xcode, exclusions, repository dispatch (tool items never reach the Trash path, left
+  in place with a reason without a tool service, kept in place while Simulator runs,
+  `CleanupEngine` refuses them), history `method` round-trip and legacy decoding, and the
+  presentation copy before and after a mixed cleanup. One service test lists devices through
+  the real runner read-only and is skipped where simctl is absent.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `Simulators.swift` and `ToolRunner.swift`. Version 0.5.0 (7).
+
+### Not performed
+
+- No simulator runtime or device was removed on the author's Mac; the delete path was
+  exercised only through the fake runner. The first real removal is the user's to run, after
+  reviewing the row and quitting Simulator.
+- The app was built but not opened; the new category tile, badge and confirmation copy were
+  verified through presenter and view-model tests, not on screen.
+
 ## 0.4.1 — key status, Test key, Claude 5.5 models, 30 October 2026
 
 - Audit of the 0.4.0 Claude integration. Findings fixed: no way to learn whether a saved key

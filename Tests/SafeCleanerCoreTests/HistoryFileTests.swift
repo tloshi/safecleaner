@@ -6,6 +6,22 @@ import XCTest
 /// format is load-bearing — a shape change with no migration path would pause cleanup
 /// for every existing user, permanently and with no in-app recovery.
 final class HistoryFileTests: XCTestCase {
+    /// Older histories have no `method`; they read as Trash moves. Unknown values from a
+    /// newer build must not make the history unreadable, because that pauses cleanup.
+    func testRemovalMethodRoundTripsAndIsOptionalForOlderRecords() throws {
+        let record = CleanupRecord(originalPath: "/Library/Developer/CoreSimulator/Volumes/iOS-26-2", trashPath: nil, bytes: 8_000, error: nil, method: .tool)
+        let decoded = try HistoryFile.decode(try HistoryFile.encode([record]))
+        XCTAssertEqual(decoded.first?.method, .tool)
+        XCTAssertTrue(decoded.first?.isToolRemoval == true)
+        let legacy = Data("""
+        {"schemaVersion":1,"records":[{"id":"6B3F8C2E-1D4A-4B9C-8E7F-0A1B2C3D4E5F","date":0,"originalPath":"/x","trashPath":"/t","bytes":1,"error":null,"failure":null},
+        {"id":"6B3F8C2E-1D4A-4B9C-8E7F-0A1B2C3D4E60","date":0,"originalPath":"/y","trashPath":null,"bytes":1,"error":null,"failure":null,"method":"teleport"}]}
+        """.utf8)
+        let old = try HistoryFile.decode(legacy)
+        XCTAssertNil(old[0].method); XCTAssertFalse(old[0].isToolRemoval)
+        XCTAssertEqual(old[1].method, .trash, "unknown methods read as Trash moves")
+    }
+
     private func record(_ path: String) -> CleanupRecord {
         CleanupRecord(originalPath: path, trashPath: "/Trash/\(path)", bytes: 10, error: nil)
     }

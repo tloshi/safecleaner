@@ -12,6 +12,7 @@ import Foundation
     private let home: URL
     private let advisor: (any ClaudeAdvising)?
     private let apiKeys: (any APIKeyStoring)?
+    private let tools: (any ToolRemoving)?
     private var settings = WorkspaceSettings()
     private var history: [CleanupRecord] = []
     private var historyAvailable = false
@@ -21,11 +22,12 @@ import Foundation
                 disk: any DiskInfoProviding, settings: any SettingsStoring,
                 history: any HistoryStoring, desktop: any DesktopInteracting,
                 validator: any ProjectRootValidating, home: URL,
-                advisor: (any ClaudeAdvising)? = nil, apiKeys: (any APIKeyStoring)? = nil) {
+                advisor: (any ClaudeAdvising)? = nil, apiKeys: (any APIKeyStoring)? = nil,
+                tools: (any ToolRemoving)? = nil) {
         self.scanner = scanner; self.cleaner = cleaner; self.disk = disk
         self.settingsStore = settings; self.historyStore = history
         self.desktop = desktop; self.validator = validator; self.home = home
-        self.advisor = advisor; self.apiKeys = apiKeys
+        self.advisor = advisor; self.apiKeys = apiKeys; self.tools = tools
     }
 
     public func hasClaudeKey() throws -> Bool { try apiKeys?.hasKey() ?? false }
@@ -158,6 +160,14 @@ import Foundation
                 let name = desktop.applicationName(for: owner) ?? owner
                 record = CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
                     error: "Skipped because \(name) is open. Quit \(name), then scan again.", failure: .appRunning)
+            } else if item.removal != nil {
+                // Tool-managed: the owning tool removes it, never a Trash move or a file delete.
+                if let tools { record = await tools.remove(item) }
+                else {
+                    record = CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
+                        error: "Tool removal is unavailable in this workspace. The item was left in place.",
+                        failure: .other, method: .tool)
+                }
             } else {
                 record = await cleaner.moveToTrash(item)
             }

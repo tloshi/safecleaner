@@ -8,10 +8,54 @@ import XCTest
             allowedRoot: URL(fileURLWithPath: "/fixture"), canTrash: true, ownerBundleID: owner)
     }
     private func make(settings: FakeSettings? = nil, history: FakeHistory = FakeHistory(),
-                      desktop: FakeDesktop? = nil, cleaner: FakeCleaner = FakeCleaner()) -> LocalCleaningRepository {
+                      desktop: FakeDesktop? = nil, cleaner: FakeCleaner = FakeCleaner(),
+                      tools: (any ToolRemoving)? = nil) -> LocalCleaningRepository {
         .init(scanner: FakeScanner(), cleaner: cleaner, disk: FakeDisk(), settings: settings ?? FakeSettings(),
-            history: history, desktop: desktop ?? FakeDesktop(), validator: FakeValidator(), home: URL(fileURLWithPath: "/fixture"))
+            history: history, desktop: desktop ?? FakeDesktop(), validator: FakeValidator(), home: URL(fileURLWithPath: "/fixture"),
+            tools: tools)
     }
+    private func simulator() -> Candidate {
+        Candidate(url: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS-26-2"), title: "iOS 26.2 simulator runtime",
+            category: .simulators, reason: "Fixture", consequence: "Permanent",
+            stamp: .init(digest: "simctl-runtime:fixture", logicalBytes: 8_000, allocatedBytes: 8_000, fileCount: 0),
+            allowedRoot: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes"), canTrash: true,
+            ownerBundleID: SimulatorRules.owner, removal: .simulatorRuntime(identifier: "7108F245-A808-4DA6-BB9B-C870AA12AF8B"))
+    }
+
+    /// Tool-managed items never reach the Trash path, and without a tool service they are
+    /// left in place with a reason rather than silently skipped.
+    func testToolManagedItemsGoToTheirToolNeverToTrash() async throws {
+        let cleaner = FakeCleaner(), tools = FakeTools()
+        let repository = make(cleaner: cleaner, tools: tools)
+        _ = await repository.load()
+        let result = try await repository.clean([simulator(), fixture()])
+        let removed = await tools.items, moves = await cleaner.calls
+        XCTAssertEqual(removed.map(\.id), [simulator().id])
+        XCTAssertEqual(moves, 1)
+        XCTAssertEqual(result.records.map(\.method), [.tool, nil])
+        XCTAssertNil(result.records[0].error)
+
+        let bare = make(cleaner: FakeCleaner())
+        _ = await bare.load()
+        let left = try await bare.clean([simulator()])
+        XCTAssertTrue(left.records[0].error?.contains("unavailable") == true)
+        XCTAssertEqual(left.records[0].failure, .other)
+        XCTAssertEqual(left.records[0].method, .tool)
+    }
+
+    func testOpenSimulatorAppKeepsToolManagedItemsInPlaceAndTheEngineRefusesThem() async throws {
+        let desktop = FakeDesktop(); desktop.running = [SimulatorRules.owner]
+        let tools = FakeTools()
+        let repository = make(desktop: desktop, tools: tools)
+        _ = await repository.load()
+        let result = try await repository.clean([simulator()])
+        XCTAssertEqual(result.records[0].failure, .appRunning)
+        let removed = await tools.items
+        XCTAssertTrue(removed.isEmpty)
+        let engine = CleanupEngine(trash: { _ in XCTFail("a tool-managed item must never be trashed"); return nil })
+        XCTAssertNotNil(engine.perform(simulator()).error)
+    }
+
 
     func testClaudeCredentialsAreValidatedStoredSeparatelyAndNeverSentOnSave() async throws {
         let keys = FakeAPIKeys(), advisor = FakeAdvisor(), settings = FakeSettings()
@@ -301,6 +345,14 @@ private actor FakeHistory: HistoryStoring {
         if saves == failingSave { throw SafetyError.refused("Injected disk error") }
     }
 }
+private actor FakeTools: ToolRemoving {
+    var items: [Candidate] = []
+    func remove(_ item: Candidate) async -> CleanupRecord {
+        items.append(item)
+        return .init(originalPath: item.id, trashPath: nil, bytes: item.bytes, error: nil, method: .tool)
+    }
+}
+
 private actor FakeCleaner: CleanupServicing {
     var calls = 0
     func moveToTrash(_ item: Candidate) async -> CleanupRecord {

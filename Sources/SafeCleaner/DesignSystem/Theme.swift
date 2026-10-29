@@ -20,6 +20,7 @@ enum Palette {
         case .browsers: return Color(red: 0.49, green: 0.76, blue: 0.98)
         case .logs: return amber
         case .projects: return rose
+        case .simulators: return Color(red: 0.45, green: 0.86, blue: 0.90)
         }
     }
 }

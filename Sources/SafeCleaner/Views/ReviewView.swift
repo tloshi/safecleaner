@@ -170,9 +170,12 @@ struct ConfirmationView: View {
         VStack(alignment: .leading, spacing: 20) {
             Image(systemName: "trash").font(.system(size: 28, weight: .light)).foregroundStyle(Palette.mint)
                 .frame(width: 62, height: 62).background(Palette.mint.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
-            Text("Move \(state.selectedSize) to Trash?").font(.system(size: 25, weight: .semibold))
-            Text("These exact items will move to Trash. You can restore them in Finder until the Trash is emptied.")
-                .font(.system(size: 13)).foregroundStyle(Palette.muted)
+            Text(state.confirmationTitle).font(.system(size: 25, weight: .semibold))
+            Text(state.confirmationDetail).font(.system(size: 13)).foregroundStyle(Palette.muted)
+            if let note = state.confirmationToolNote {
+                Label { Text(note).font(.system(size: 12)) } icon: { Image(systemName: "exclamationmark.triangle") }
+                    .foregroundStyle(.orange)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(state.confirmationItems) { item in
@@ -198,7 +201,7 @@ struct ConfirmationView: View {
                 if let hint = state.confirmationHint {
                     Text(hint).font(.system(size: 11)).foregroundStyle(.orange)
                 }
-                Button("Move to Trash") { send(.confirmCleanup) }.buttonStyle(PrimaryButton()).disabled(!state.canConfirmCleanup)
+                Button(state.confirmButtonTitle) { send(.confirmCleanup) }.buttonStyle(PrimaryButton()).disabled(!state.canConfirmCleanup)
             }
         }.padding(30).frame(width: 560).background(Palette.sidebar)
     }

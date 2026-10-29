@@ -160,6 +160,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Real disk capacity and free-space display. No pre-populated fake scan results.
 - Read-only scanning with progress and cancellation.
 - Targeted developer-cache rules: Xcode DerivedData, SwiftPM, npm `_cacache`, Gradle `build-cache-1`, CocoaPods, Homebrew downloads and pip.
+- Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Third-party immediate children of `~/Library/Caches`, individually reviewed; Apple caches are excluded.
 - Browser cache classification in user cache locations. Browser profiles are not targeted.
 - `.log` files under user logs that have not changed for over 30 days.
@@ -169,6 +170,15 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Revalidation of the tree before Trash; no permanent-delete fallback.
 - Persistent local cleanup history with Finder links. Restore uses Finder’s Trash; no automated restore yet.
 - Clearly reported skipped locations, partial project scans and failures.
+
+## Simulators (0.5)
+
+Scanning now lists Xcode simulator runtimes and devices that nothing has used for 30 days.
+These are removed by Xcode's own `xcrun simctl`, not moved to Trash, and the app says so on
+the row, in the selection summary, in the confirmation sheet and in Activity. The newest
+runtime for each platform is always kept, a runtime with any booted or recently used device
+is kept, and every item is re-checked immediately before removal. Quit Simulator before
+cleaning; while it is open these items are left in place.
 
 ## Claude review (0.4)
 

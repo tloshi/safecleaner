@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable {
-    case developer, applications, browsers, logs, projects
+    case developer, applications, browsers, logs, projects, simulators
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -10,6 +10,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .browsers: return "Browser caches"
         case .logs: return "Old logs"
         case .projects: return "Project builds"
+        case .simulators: return "Simulators"
         }
     }
     public var symbol: String {
@@ -19,6 +20,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .browsers: return "globe"
         case .logs: return "doc.text"
         case .projects: return "folder.badge.gearshape"
+        case .simulators: return "iphone"
         }
     }
     public var detail: String {
@@ -28,7 +30,25 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .browsers: return "Cache folders only; your profiles stay put"
         case .logs: return "Inactive .log files older than 30 days"
         case .projects: return "Generated folders in projects you choose"
+        case .simulators: return "Runtimes and devices unused for 30 days, removed by Xcode's simctl"
         }
+    }
+}
+
+/// How a candidate leaves the disk when it is not a Trash move: the owning tool removes it.
+/// The payload is only ever an identifier that tool reported itself, and the catalogue
+/// re-validates it as a UUID before it becomes a command argument.
+public enum ToolRemoval: Codable, Sendable, Equatable, Hashable {
+    case simulatorRuntime(identifier: String)
+    case simulatorDevice(udid: String)
+}
+
+/// Recorded with each history entry so the Activity list says what actually happened.
+/// Absent in histories written before it existed, which means a Trash move.
+public enum RemovalMethod: String, Codable, Sendable {
+    case trash, tool
+    public init(from decoder: Decoder) throws {
+        self = RemovalMethod(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .trash
     }
 }
 
@@ -54,13 +74,17 @@ public struct Candidate: Identifiable, Codable, Sendable {
     public let allowedRoot: URL
     public let canTrash: Bool
     public let ownerBundleID: String?
+    /// Set when the owning tool removes the item instead of a Trash move. `canTrash` still
+    /// means "selectable for cleanup"; the consequence text says it is permanent.
+    public let removal: ToolRemoval?
     public var bytes: Int64 { stamp.allocatedBytes }
     public init(url: URL, title: String, category: CleanCategory, reason: String,
                 consequence: String, stamp: TreeStamp, allowedRoot: URL,
-                canTrash: Bool, ownerBundleID: String?) {
+                canTrash: Bool, ownerBundleID: String?, removal: ToolRemoval? = nil) {
         self.url = url; self.title = title; self.category = category
         self.reason = reason; self.consequence = consequence; self.stamp = stamp
         self.allowedRoot = allowedRoot; self.canTrash = canTrash; self.ownerBundleID = ownerBundleID
+        self.removal = removal
     }
 }
 
@@ -114,11 +138,16 @@ public struct CleanupRecord: Identifiable, Codable, Sendable {
     public let error: String?
     /// Optional so histories written before this field existed still decode without a schema bump.
     public let failure: CleanupFailure?
-    public init(originalPath: String, trashPath: String?, bytes: Int64, error: String?, failure: CleanupFailure? = nil) {
+    /// Optional for the same reason; nil reads as a Trash move.
+    public let method: RemovalMethod?
+    public init(originalPath: String, trashPath: String?, bytes: Int64, error: String?,
+                failure: CleanupFailure? = nil, method: RemovalMethod? = nil) {
         id = UUID(); date = Date(); self.originalPath = originalPath
         self.trashPath = trashPath; self.bytes = bytes; self.error = error
         self.failure = error == nil ? nil : (failure ?? .other)
+        self.method = method
     }
+    public var isToolRemoval: Bool { method == .tool }
 }
 
 public enum SafetyError: LocalizedError {

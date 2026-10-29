@@ -93,6 +93,15 @@ public protocol HistoryStoring: Sendable {
 public protocol ProjectRootValidating: Sendable {
     func validate(_ url: URL) throws
 }
+/// Runs one catalogue command and returns its standard output. The only place the app
+/// executes anything; implementations validate the executable before running it.
+public protocol ToolRunning: Sendable {
+    func run(_ command: ToolCommand) async throws -> Data
+}
+/// Removes a tool-managed candidate through its owning tool. Never a filesystem delete.
+public protocol ToolRemoving: Sendable {
+    func remove(_ item: Candidate) async -> CleanupRecord
+}
 
 @MainActor public protocol CleaningRepository: AnyObject {
     func setProjectProtection(_ url: URL, protected: Bool) throws -> WorkspaceSettings

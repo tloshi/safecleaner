@@ -104,9 +104,22 @@ Gjendjet e UI: pa skanim; duke skanuar; skanim i anuluar; pa rezultate; rezultat
 3. Gradle: ndaji build cache, dependency cache dhe distributions; mos e fshi krejt `.gradle`.
 4. npm/yarn/pnpm: dallo store/cache nga konfigurimi, credentials dhe linked packages.
 5. Pub/Flutter: dallo cache të paketave nga global packages; ruaj SDK-të dhe burimet.
-6. Xcode: DerivedData sipas projektit; Archives, DeviceSupport dhe simulator runtimes si kategori të veçanta që kërkojnë shqyrtim.
+6. Xcode: DerivedData sipas projektit; Archives, DeviceSupport dhe simulator runtimes si kategori të veçanta që kërkojnë shqyrtim. **[simulatorët: e implementuar në 0.5, shih më poshtë]**
 7. Projektet: konfirmo framework-un, build directory custom, procese aktive, Git-tracked files dhe lokale të modifikuara. Vetëm pastaj aktivizo Trash për kategori të miratuara.
-8. Shto adapterë zyrtarë për simulatorë dhe Docker kur fshirja direkte e folderëve s’është veprimi i duhur.
+8. Shto adapterë zyrtarë për simulatorë dhe Docker kur fshirja direkte e folderëve s’është veprimi i duhur. **[simulatorët: e implementuar në 0.5; Docker: e planifikuar]**
+
+**Simulatorët (0.5, 30 tetor 2026) — e implementuar:** skanimi ekzekuton dy komanda vetëm-lexim
+(`xcrun simctl runtime list -j`, `xcrun simctl list devices -j`) përmes `ToolRunner`, i vetmi vend
+ku aplikacioni nis një proces; ekzekutuesi validohet dhe argumenti i vetëm që vjen nga rezultati i
+skanimit është një UUID i raportuar nga vetë simctl. Ofrohen vetëm: runtime të fshishëm, jo më të
+rinjtë për platformë, të papërdorur 30 ditë dhe pa pajisje të ndezur ose të përdorur së fundmi;
+pajisje të fikura, të disponueshme, me të dhëna, të papërdorura 30 ditë. Heqja bëhet me
+`simctl runtime delete <id>` / `simctl delete <udid>` një nga një, pas një ri-inventari (nëse
+artikulli u përdor pas skanimit, lihet në vend si “changed”). Kjo është heqje e përhershme, jo
+Trash: UI-ja e thotë në rresht, në përmbledhjen e përzgjedhjes, në dialogun e konfirmimit dhe në
+Activity. Simulator.app i hapur bllokon tërë grupin. Fixtures pozitive/negative në
+`SimulatorTests.swift`. **Kufizime:** nuk heq runtime të padisponueshëm dhe nuk prek
+`/Library/Developer/CoreSimulator/Caches`; nuk ka ende adapter për Docker, NDK ose AVD.
 
 **Docker:** inventar fillimisht. Volumes dhe të dhëna të containers nuk trajtohen si cache; asnjë komandë e përgjithshme prune pa listë konkrete dhe konfirmim.
 

@@ -17,12 +17,14 @@ import SafeCleanerPresentation
             return WorkspaceViewModel(repository: PreviewRepository(), homePath: "/preview", version: bundleVersion, previewReport: PreviewFixtures.report)
         }
         let home = FileManager.default.homeDirectoryForCurrentUser
+        let tools = ToolRunner()
         let repository = LocalCleaningRepository(
-            scanner: LocalScanService(), cleaner: LocalCleanupService(), disk: LocalDiskInfoService(home: home),
+            scanner: LocalScanService(simulators: SimulatorScan(runner: tools)), cleaner: LocalCleanupService(),
+            disk: LocalDiskInfoService(home: home),
             settings: UserDefaultsSettingsStore(defaults: .standard),
             history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/SafeCleaner/history.json")),
             desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home,
-            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore())
+            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore(), tools: SimulatorRemover(runner: tools))
         return WorkspaceViewModel(repository: repository, homePath: home.path, version: bundleVersion)
     }
 }
