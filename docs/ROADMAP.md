@@ -187,6 +187,15 @@ rrugë, përmbajtje skedarësh ose gabime të papërpunuara. Një kërkesë vet�
 për analizën e fundit identike, anulim dhe pa retries automatike. Rekomandimet vetëm filtrojnë
 listën për shqyrtim; nuk përzgjedhin dhe nuk autorizojnë pastrim.
 
+**Shtuar më 30 tetor 2026 (0.4.1):** modelet Haiku 5.5 (ekonomik, parazgjedhje) dhe Sonnet 5.5,
+me `effort: low` dhe `max_tokens` 4000 sepse të dy modelet arsyetojnë para përgjigjes dhe ai
+arsyetim llogaritet brenda kufirit; përgjigjet lexohen sipas llojit të bllokut, jo pozicionit.
+Butoni **Test key** bën një kërkesë falas te Models API (pa të dhëna skanimi, pa tokenë) dhe
+treguesi i statusit të çelësit (pa çelës / i ruajtur por i patestuar / duke u testuar / i pranuar /
+dështoi) shfaqet në Settings dhe në Claude review. Gabimet e Anthropic shfaqen me llojin dhe
+mesazhin e tyre (të pastruara dhe të kufizuara), dhe nën butonin e dërgimit shkruhet pse është i
+çaktivizuar. Versioni i API-së: 2026-10-21.
+
 **Kufizime / e planifikuar:** AI analizon vetëm kandidatët ekzistues; nuk shton disk explorer,
 adapterë Android/Gradle/simulatorësh ose kontrolle të reja të ciklit të jetës së projekteve.
 Nuk njeh përdorimin real/aktivitetin nga madhësia e grupit. Nuk ka cache persistente ose buxhet

@@ -54,7 +54,9 @@ final class BuildOutputTests: XCTestCase {
             .appendingPathComponent("SafeCleanerBuildOutput-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let fortyDaysAgo = Date().addingTimeInterval(-40 * 86_400)
+        // Calendar days, not 40 × 86,400 s: across a daylight-saving change that interval is
+        // 39 days 23 hours on the calendar, and idleDays counts calendar days on purpose.
+        let fortyDaysAgo = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -40, to: Date()))
         try FileManager.default.setAttributes([.modificationDate: fortyDaysAgo], ofItemAtPath: dir.path)
         XCTAssertEqual(BuildOutput.idleDays(dir), 40)
     }

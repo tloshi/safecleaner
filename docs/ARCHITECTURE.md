@@ -94,7 +94,12 @@ through `APIKeyStoring`; `KeychainAPIKeyStore` and the concrete `ClaudeService` 
 `AppContainer`. The service uses an ephemeral HTTPS session to the fixed Anthropic endpoint,
 refuses redirects, caps response bytes and has no tool, filesystem or cleanup capability.
 `ClaudeMessages` builds bounded requests and validates JSON responses, known/unique group IDs,
-stop reasons and scan-only restrictions. Network/error bodies are never logged or surfaced raw.
+stop reasons and scan-only restrictions. The transport returns status and body together; a
+non-200 body is mapped by `ClaudeMessages.failure` to a `ClaudeFailure` whose kind (authentication,
+billing, model, rate limit, service, network) lets the ViewModel update the key status, and whose
+message carries Anthropic's error type and message in sanitized, bounded form. Nothing is logged.
+`verify` is one GET against the Models endpoint with the key alone; the ViewModel exposes it as
+“Test key” and keeps the result as session-only state.
 
 Analysis is an explicit busy operation. No startup/scan/key-save requests, automatic retries,
 model escalation or auto-selection exist. New scans, candidate removal and model changes clear

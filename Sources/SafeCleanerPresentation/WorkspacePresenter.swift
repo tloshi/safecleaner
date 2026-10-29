@@ -99,9 +99,15 @@ enum WorkspacePresenter {
             ? "Tick the box above to enable Move to Trash." : nil
         state.claudeKeyDraft = session.claudeKeyDraft; state.hasClaudeKey = session.hasClaudeKey
         state.claudeModel = session.claudeModel; state.isAnalyzing = session.operation == .analyzing
-        state.canAnalyze = !busy && !preview && session.hasClaudeKey && session.aiPacket != nil
-        state.canEditClaudeKey = !preview && !session.savingKey && session.operation != .loading && session.operation != .analyzing
+        let checkingKey = session.keyCheck == .checking
+        state.canAnalyze = !busy && !preview && !checkingKey && session.hasClaudeKey && session.aiPacket != nil
+        state.canEditClaudeKey = !preview && !session.savingKey && !checkingKey
+            && session.operation != .loading && session.operation != .analyzing
         state.canSaveClaudeKey = state.canEditClaudeKey && !session.claudeKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        state.isVerifyingClaudeKey = checkingKey
+        state.canVerifyClaudeKey = state.canEditClaudeKey && session.hasClaudeKey
+        (state.claudeKeyStatus, state.claudeKeyDetail, state.claudeKeyTone) = keyStatus(session)
+        state.aiSendHint = state.canAnalyze ? nil : sendHint(session, busy: busy, preview: preview)
         state.aiGroupFilterTitle = session.aiGroupFilter?.kind
         if let packet = session.aiPacket {
             state.aiPayload = packet.json
@@ -130,6 +136,36 @@ enum WorkspacePresenter {
             (session.category == nil || $0.category == session.category) &&
             (session.query.isEmpty || $0.title.localizedCaseInsensitiveContains(session.query) || $0.url.path.localizedCaseInsensitiveContains(session.query))
         }
+    }
+
+    private static func keyStatus(_ session: WorkspaceSession) -> (String, String?, ClaudeKeyTone) {
+        guard session.hasClaudeKey else {
+            return ("No API key saved", "Create a key in the Anthropic Console and save it to Keychain in Settings.", .missing)
+        }
+        func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }
+        switch session.keyCheck {
+        case .untested:
+            return ("Saved in Keychain · Not tested yet",
+                    "Test key asks Anthropic whether it accepts the key. The check is free and sends no scan data.", .untested)
+        case .checking:
+            return ("Testing the key with Anthropic…", nil, .checking)
+        case .verified(let model, let at):
+            return ("Key accepted · \(model) · \(time(at))",
+                    "Checked without using tokens. Credits are only confirmed by a real request.", .verified)
+        case .failed(let reason, let at):
+            return ("Key check failed · \(time(at))", reason, .failed)
+        }
+    }
+
+    private static func sendHint(_ session: WorkspaceSession, busy: Bool, preview: Bool) -> String? {
+        if preview { return "Preview mode never contacts Anthropic." }
+        if !session.hasClaudeKey { return "Add your Anthropic API key in Settings to enable this." }
+        if session.keyCheck == .checking { return "Wait for the key test to finish." }
+        if session.operation == .analyzing || busy { return nil }
+        if session.aiPacket == nil {
+            return session.lastScan == nil ? "Scan first. Claude reviews the grouped scan results." : "The last scan found nothing to review."
+        }
+        return nil
     }
 
     private static func busyStatus(_ session: WorkspaceSession) -> String? {

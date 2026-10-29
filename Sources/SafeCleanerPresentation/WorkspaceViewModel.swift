@@ -46,6 +46,8 @@ import SafeCleanerCore
         case .navigate(let destination):
             session.destination = destination
             if destination != .settings { session.claudeKeyDraft = "" }
+            // A key added or removed in Keychain Access while the app runs shows up here, not only after a relaunch.
+            if previewReport == nil, destination == .settings || destination == .assistant { refreshKeyPresence() }
         case .dismissMessage: session.message = nil
         case .dismissResult: session.outcome = nil
         case .stopCleanup:
@@ -230,8 +232,10 @@ import SafeCleanerCore
                     if removing { try await self.repository.removeClaudeKey() }
                     else { try await self.repository.saveClaudeKey(key) }
                     self.session.hasClaudeKey = !removing
+                    self.session.keyCheck = .untested
                     self.session.aiAnalysis = nil
-                    self.session.message = removing ? "API key removed from Keychain." : "API key saved in Keychain. No request has been sent."
+                    self.session.message = removing ? "API key removed from Keychain."
+                        : "API key saved in Keychain. No request has been sent. Use Test key to confirm Anthropic accepts it."
                 } catch { self.session.message = error.localizedDescription }
                 self.session.savingKey = false; self.publish()
             }
@@ -250,12 +254,35 @@ import SafeCleanerCore
                     let result = try await self.repository.analyzeWithClaude(packet, model: model)
                     try Task.checkCancellation()
                     self.session.aiAnalysis = result
+                    // A successful paid request is the strongest proof the key works.
+                    self.session.keyCheck = .verified(model: model.title, at: Date())
                 } catch is CancellationError {
                     self.session.message = "Claude request cancelled. A request already submitted may still use credits. No files or selection changed."
-                } catch { self.session.message = error.localizedDescription }
+                } catch {
+                    if let failure = error as? ClaudeFailure, failure.kind == .authentication {
+                        self.session.keyCheck = .failed(reason: failure.message, at: Date())
+                    }
+                    self.session.message = error.localizedDescription
+                }
                 self.session.operation = .idle; self.activeTask = nil; self.publish()
             }
             activeTask = task; return task
+        case .verifyClaudeKey:
+            guard state.canVerifyClaudeKey else { return nil }
+            session.keyCheck = .checking; session.message = nil; publish()
+            let model = session.claudeModel
+            return Task<Void, Never> { [weak self] in
+                guard let self else { return }
+                do {
+                    let check = try await self.repository.verifyClaudeKey(model: model)
+                    self.session.keyCheck = .verified(model: check.modelName, at: Date())
+                    self.session.message = "Anthropic accepted your API key. \(check.modelName) is available. No scan data was sent and no tokens were used."
+                } catch {
+                    self.session.keyCheck = .failed(reason: error.localizedDescription, at: Date())
+                    self.session.message = error.localizedDescription
+                }
+                self.publish()
+            }
         case .cancelClaude:
             if session.operation == .analyzing { activeTask?.cancel() }
         case .reviewAIGroup(let id):
@@ -335,6 +362,12 @@ import SafeCleanerCore
     private func invalidateAI() {
         session.aiAnalysis = nil; session.aiGroupFilter = nil
         session.aiPacket = session.candidates.isEmpty ? nil : AIReviewPacket(candidates: session.candidates, skippedLocations: session.issues.count)
+    }
+    private func refreshKeyPresence() {
+        do {
+            let present = try repository.hasClaudeKey()
+            if present != session.hasClaudeKey { session.hasClaudeKey = present; session.keyCheck = .untested }
+        } catch { session.message = error.localizedDescription }
     }
     private func item(_ id: String) -> Candidate? { session.candidates.first { $0.id == id } }
     private func closeConfirmation() { session.showConfirmation = false; session.acknowledged = false }

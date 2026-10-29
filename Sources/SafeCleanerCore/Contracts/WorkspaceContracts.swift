@@ -99,6 +99,7 @@ public protocol ProjectRootValidating: Sendable {
     func hasClaudeKey() throws -> Bool
     func saveClaudeKey(_ key: String) async throws
     func removeClaudeKey() async throws
+    func verifyClaudeKey(model: ClaudeModel) async throws -> ClaudeKeyCheck
     func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis
     func load() async -> WorkspaceSnapshot
     func scan(progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport
@@ -132,6 +133,9 @@ extension CleaningRepository {
     public func quitApplication(_ bundleID: String) async -> AppQuitOutcome { .stillRunning }
     public func saveClaudeKey(_ key: String) async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }
     public func removeClaudeKey() async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }
+    public func verifyClaudeKey(model: ClaudeModel) async throws -> ClaudeKeyCheck {
+        throw SafetyError.refused("Claude is unavailable in this workspace.")
+    }
     public func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis {
         throw SafetyError.refused("Claude is unavailable in this workspace.")
     }

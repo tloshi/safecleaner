@@ -62,12 +62,19 @@ private final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Se
     }
 }
 
-/// Single request per explicit action. No tools, retries, background calls or file access.
+/// Status and body together, so a non-200 reply keeps the error body Anthropic sent with it.
+struct HTTPReply: Sendable {
+    let status: Int
+    let body: Data
+}
+
 actor ClaudeService: ClaudeAdvising {
+    static let analysisTimeout: TimeInterval = 60
+    static let keyCheckTimeout: TimeInterval = 20
     private var cached: (key: String, result: AIAnalysis)?
     private var requesting = false
-    private let transport: @Sendable (URLRequest) async throws -> Data
-    init(transport: @escaping @Sendable (URLRequest) async throws -> Data = { try await ClaudeService.send($0) }) {
+    private let transport: @Sendable (URLRequest) async throws -> HTTPReply
+    init(transport: @escaping @Sendable (URLRequest) async throws -> HTTPReply = { try await ClaudeService.send($0) }) {
         self.transport = transport
     }
     func clearCache() { cached = nil }
@@ -77,53 +84,71 @@ actor ClaudeService: ClaudeAdvising {
         if let cached, cached.key == cacheKey {
             var result = cached.result; result.cached = true; return result
         }
-        guard !requesting else { throw SafetyError.refused("A Claude request is already running.") }
-        requesting = true; defer { requesting = false }
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-        request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        var request = Self.request(ClaudeMessages.messagesEndpoint, method: "POST", apiKey: apiKey, timeout: Self.analysisTimeout)
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try ClaudeMessages.body(packet: packet, model: model)
-        let data = try await transport(request)
-        try Task.checkCancellation()
-        let result = try ClaudeMessages.decode(data, packet: packet)
+        let reply = try await exchange(request)
+        guard reply.status == 200 else { throw ClaudeMessages.failure(status: reply.status, body: reply.body) }
+        let result = try ClaudeMessages.decode(reply.body, packet: packet)
         cached = (cacheKey, result)
         return result
     }
 
-    static func send(_ request: URLRequest) async throws -> Data {
+    func verify(apiKey: String, model: ClaudeModel) async throws -> ClaudeKeyCheck {
+        let request = Self.request(ClaudeMessages.modelEndpoint(model), method: "GET", apiKey: apiKey, timeout: Self.keyCheckTimeout)
+        let reply = try await exchange(request)
+        guard reply.status == 200 else { throw ClaudeMessages.failure(status: reply.status, body: reply.body) }
+        return try ClaudeMessages.decodeModel(reply.body, expected: model)
+    }
+
+    private func exchange(_ request: URLRequest) async throws -> HTTPReply {
+        guard !requesting else { throw ClaudeFailure(kind: .busy, message: "A Claude request is already running.") }
+        requesting = true; defer { requesting = false }
+        let reply = try await transport(request)
+        try Task.checkCancellation()
+        return reply
+    }
+
+    private static func request(_ url: URL, method: String, apiKey: String, timeout: TimeInterval) -> URLRequest {
+        var request = URLRequest(url: url, timeoutInterval: timeout)
+        request.httpMethod = method
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(ClaudeMessages.apiVersion, forHTTPHeaderField: "anthropic-version")
+        return request
+    }
+
+    static func send(_ request: URLRequest) async throws -> HTTPReply {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 90
+        configuration.timeoutIntervalForRequest = request.timeoutInterval
+        configuration.timeoutIntervalForResource = request.timeoutInterval * 1.5
         configuration.httpCookieStorage = nil; configuration.urlCache = nil
         let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         do {
             let (stream, response) = try await session.bytes(for: request)
-            guard let response = response as? HTTPURLResponse else { throw SafetyError.refused("Claude returned an invalid HTTP response.") }
-            guard response.statusCode == 200 else {
-                let detail: String
-                switch response.statusCode {
-                case 401, 403: detail = "The API key was rejected or lacks access. Check it in Settings."
-                case 429: detail = "Rate or credit limit reached. Check your Anthropic account before trying again."
-                case 400, 404: detail = "The model or request is unavailable. Try another model or update the app."
-                default: detail = "The service is unavailable (HTTP \(response.statusCode))."
-                }
-                throw SafetyError.refused("\(detail) No automatic retry was made.")
+            guard let response = response as? HTTPURLResponse else {
+                throw ClaudeFailure(kind: .invalidResponse, message: "Claude returned an invalid HTTP response.")
             }
             var data = Data()
             for try await byte in stream {
                 try Task.checkCancellation()
-                guard data.count < 64_000 else { throw SafetyError.refused("Claude's response exceeded the size limit.") }
+                if data.count >= ClaudeMessages.maxResponseBytes {
+                    // A successful reply this large is rejected; an error body is simply cut.
+                    guard response.statusCode != 200 else {
+                        throw ClaudeFailure(kind: .invalidResponse, message: "Claude's response exceeded the size limit.")
+                    }
+                    break
+                }
                 data.append(byte)
             }
-            return data
+            return HTTPReply(status: response.statusCode, body: data)
         } catch is CancellationError { throw CancellationError() }
-        catch let error as SafetyError { throw error }
+        catch let error as ClaudeFailure { throw error }
         catch {
             if Task.isCancelled { throw CancellationError() }
-            throw SafetyError.refused("Claude could not be reached. No automatic retry was made. A submitted request may still use credits.")
+            // URLError descriptions name the cause (offline, DNS, timeout) and never carry headers.
+            throw ClaudeFailure(kind: .network,
+                message: "Claude could not be reached: \(error.localizedDescription) No automatic retry was made. A submitted request may still use credits.")
         }
     }
 }

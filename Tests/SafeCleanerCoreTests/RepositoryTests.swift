@@ -38,6 +38,22 @@ import XCTest
         XCTAssertEqual(cleared, 2)
     }
 
+    func testKeyCheckReadsTheSavedKeyAndAdminKeysAreRefusedBeforeStorage() async throws {
+        let keys = FakeAPIKeys(), advisor = FakeAdvisor()
+        let repository = LocalCleaningRepository(scanner: FakeScanner(), cleaner: FakeCleaner(), disk: FakeDisk(),
+            settings: FakeSettings(), history: FakeHistory(), desktop: FakeDesktop(), validator: FakeValidator(),
+            home: URL(fileURLWithPath: "/fixture"), advisor: advisor, apiKeys: keys)
+        do { _ = try await repository.verifyClaudeKey(model: .haiku); XCTFail("Missing key accepted") } catch {}
+        do { try await repository.saveClaudeKey("sk-ant-admin01-synthetic-test-key"); XCTFail("Admin key accepted") } catch {}
+        XCTAssertNil(keys.key)
+        try await repository.saveClaudeKey("sk-ant-synthetic-test-key")
+        let check = try await repository.verifyClaudeKey(model: .sonnet)
+        XCTAssertEqual(check.modelID, "claude-sonnet-5-5")
+        let verifications = await advisor.verifications, calls = await advisor.calls
+        XCTAssertEqual(verifications, 1)
+        XCTAssertEqual(calls, 0, "a key check never sends scan data")
+    }
+
     func testUnavailableHistoryBlocksCleanupWithoutOverwritingIt() async {
         let history = FakeHistory(), cleaner = FakeCleaner()
         await history.setLoadFailure()
@@ -231,10 +247,14 @@ import XCTest
 }
 
 private actor FakeAdvisor: ClaudeAdvising {
-    var calls = 0, cleared = 0
+    var calls = 0, cleared = 0, verifications = 0
     func analyze(_ packet: AIReviewPacket, model: ClaudeModel, apiKey: String) async throws -> AIAnalysis {
         calls += 1
         return .init(summary: "Fixture", recommendations: [], inputTokens: 1, outputTokens: 1)
+    }
+    func verify(apiKey: String, model: ClaudeModel) async throws -> ClaudeKeyCheck {
+        verifications += 1
+        return .init(modelID: model.rawValue, modelName: "Fixture \(model.rawValue)")
     }
     func clearCache() { cleared += 1 }
 }

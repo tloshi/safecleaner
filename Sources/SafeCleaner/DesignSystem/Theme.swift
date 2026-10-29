@@ -10,13 +10,16 @@ enum Palette {
     static let mint = Color(red: 0.57, green: 0.94, blue: 0.78)
     static let muted = Color(red: 0.59, green: 0.66, blue: 0.70)
     static let line = Color.white.opacity(0.07)
+    /// Semantic status colors: amber for “not yet confirmed”, rose for a failure.
+    static let amber = Color(red: 0.98, green: 0.77, blue: 0.47)
+    static let rose = Color(red: 0.94, green: 0.61, blue: 0.70)
     static func color(_ category: CleanCategory) -> Color {
         switch category {
         case .developer: return mint
         case .applications: return Color(red: 0.72, green: 0.66, blue: 0.98)
         case .browsers: return Color(red: 0.49, green: 0.76, blue: 0.98)
-        case .logs: return Color(red: 0.98, green: 0.77, blue: 0.47)
-        case .projects: return Color(red: 0.94, green: 0.61, blue: 0.70)
+        case .logs: return amber
+        case .projects: return rose
         }
     }
 }

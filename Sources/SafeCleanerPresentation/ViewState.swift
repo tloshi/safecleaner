@@ -27,8 +27,11 @@ public enum WorkspaceAction {
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
     case resetHistory, openFullDiskAccessSettings
     case claudeKeyChanged(String), saveClaudeKey, removeClaudeKey, claudeModelChanged(ClaudeModel)
-    case analyzeWithClaude, cancelClaude, reviewAIGroup(String), clearAIGroupFilter
+    case analyzeWithClaude, cancelClaude, reviewAIGroup(String), clearAIGroupFilter, verifyClaudeKey
 }
+
+/// How the saved key stands, for the status indicator. Verified means Anthropic accepted it this session.
+public enum ClaudeKeyTone: Sendable, Equatable { case missing, untested, checking, verified, failed }
 
 public struct AIAdviceRowState: Identifiable {
     public let id: String
@@ -173,6 +176,13 @@ public struct WorkspaceViewState {
     public internal(set) var isAnalyzing = false
     public internal(set) var canAnalyze = false
     public internal(set) var canSaveClaudeKey = false
+    public internal(set) var claudeKeyStatus = "No API key saved"
+    public internal(set) var claudeKeyDetail: String?
+    public internal(set) var claudeKeyTone: ClaudeKeyTone = .missing
+    public internal(set) var canVerifyClaudeKey = false
+    public internal(set) var isVerifyingClaudeKey = false
+    /// Why “Send summary to Claude” is disabled, when it is.
+    public internal(set) var aiSendHint: String?
     public internal(set) var aiConsent = "Sends only grouped types, counts and sizes to Anthropic when you click “Send summary to Claude”. No filenames, paths or file contents. Uses your API credits."
     public internal(set) var aiPayload = "Run a scan first."
     public internal(set) var aiScope = ""
@@ -184,6 +194,13 @@ public struct WorkspaceViewState {
 }
 
 enum Operation { case loading, idle, scanning, cleaning, choosingFolder, analyzing }
+
+/// Session-only. A check is a point-in-time fact, so it is never persisted and restarts as untested.
+enum ClaudeKeyCheckState: Equatable {
+    case untested, checking
+    case verified(model: String, at: Date)
+    case failed(reason: String, at: Date)
+}
 
 struct WorkspaceSession {
     var destination: Destination = .overview
@@ -217,6 +234,7 @@ struct WorkspaceSession {
     var claudeKeyDraft = ""
     var hasClaudeKey = false
     var claudeModel: ClaudeModel = .haiku
+    var keyCheck: ClaudeKeyCheckState = .untested
     var aiPacket: AIReviewPacket?
     var aiAnalysis: AIAnalysis?
     var aiGroupFilter: AIReviewGroup?

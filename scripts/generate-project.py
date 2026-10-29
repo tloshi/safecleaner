@@ -85,7 +85,7 @@ reference = f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentif
 
 info = dict(CFBundleName="SafeCleaner", CFBundleDisplayName="SafeCleaner",
             CFBundleIdentifier="com.loshi.safecleaner", CFBundleExecutable="SafeCleaner",
-            CFBundlePackageType="APPL", CFBundleShortVersionString="0.4.0", CFBundleVersion="5",
+            CFBundlePackageType="APPL", CFBundleShortVersionString="0.4.1", CFBundleVersion="6",
             LSMinimumSystemVersion="14.0", NSHighResolutionCapable=True,
             NSPrincipalClass="NSApplication", CFBundleIconFile="AppIcon",
             CFBundleIconName="AppIcon",

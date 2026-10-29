@@ -50,6 +50,37 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.4.1 — key status, Test key, Claude 5.5 models, 30 October 2026
+
+- Audit of the 0.4.0 Claude integration. Findings fixed: no way to learn whether a saved key
+  works short of a paid request; Anthropic's error body (which names the cause) was discarded and
+  transport errors were flattened to “could not be reached”; Sonnet 5.5 could never succeed, since
+  the decoder required exactly one content block and a 1,200-token cap that the model's own
+  reasoning consumes; Haiku 4.5 was a dated snapshot ID at ten times the price of Haiku 5.5; the
+  send button was disabled without a reason; key presence was read once at launch only.
+- Added **Test key** (one free `GET /v1/models/{model}`), a five-state key indicator in Settings
+  and Claude review, sanitized surfacing of Anthropic's error type and message, a reason line under
+  a disabled send button, key-presence refresh when opening Settings or Claude review, admin-key
+  rejection on save, thinking-aware response decoding, `effort: low` with `max_tokens` 4,000,
+  model IDs `claude-haiku-5-5` and `claude-sonnet-5-5`, and `anthropic-version: 2026-10-21`.
+- Fixed a pre-existing test, `testIdleDaysReadsTheDirectoryModificationDate`, which failed every
+  day whose 40-day look-back crosses a daylight-saving change (it used 40 × 86,400 s, the
+  implementation counts calendar days). The fixture now uses calendar arithmetic.
+- **145 XCTest tests passed:** 90 core, 51 presentation, 4 service. New tests cover the
+  Models-endpoint request shape and timeout, 401 bodies on both requests, thinking-block decoding,
+  error-kind mapping and bounding, model-ID matching, the request's effort/version/model fields,
+  admin-key refusal, the key-status transitions, the send hint, and Keychain refresh on navigation.
+  No real API key or network request was used.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Version 0.4.1 (6).
+
+### Not performed
+
+- Live Anthropic authentication, Test key against a real account, real response generation on
+  Haiku 5.5 / Sonnet 5.5 and billing need the user's API key. The 4,000-token cap with low effort
+  is taken from Anthropic's migration guidance and has not been measured on a real plan.
+- The app was built but not opened; the new status row and hint were verified through the
+  presenter and view-model tests, not on screen.
+
 ## 0.4.0 — optional Claude review, 3 October 2026
 
 - Added opt-in Messages API review with Haiku 4.5 / Sonnet 5.5, Keychain credentials, a fixed

@@ -2,13 +2,11 @@ import Foundation
 import CryptoKit
 
 public enum ClaudeModel: String, CaseIterable, Sendable {
-    case haiku = "claude-haiku-4-5-20251001"
+    case haiku = "claude-haiku-5-5"
     case sonnet = "claude-sonnet-5-5"
-    public var title: String { self == .haiku ? "Haiku 4.5 · Economy" : "Sonnet 5.5 · More capable" }
+    public var title: String { self == .haiku ? "Haiku 5.5 · Economy" : "Sonnet 5.5 · More capable" }
 }
 
-/// Only these aggregate fields leave the device. Candidate IDs, names, paths,
-/// metadata digests, scan errors and file contents stay local.
 public struct AIReviewGroup: Encodable, Sendable {
     public let id: String
     public let kind: String
@@ -28,7 +26,6 @@ public struct AIReviewPacket: Sendable {
     public let json: String
 
     public init(candidates: [Candidate], skippedLocations: Int) {
-        // Labels come from this catalogue, never from user-controlled filenames.
         func kind(_ c: Candidate) -> String {
             if c.category == .projects {
                 let name = c.url.lastPathComponent
@@ -62,7 +59,6 @@ public struct AIReviewPacket: Sendable {
             let skippedLocations: Int
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        // All values are finite integers, strings and arrays, so encoding cannot fail.
         let data = (try? encoder.encode(Payload(groups: groups, omittedGroups: omittedGroups,
                                               skippedLocations: self.skippedLocations))) ?? Data()
         json = String(decoding: data, as: UTF8.self)
@@ -103,8 +99,29 @@ public struct AIAnalysis: Sendable {
     }
 }
 
+/// Outcome of the free key check against the Models endpoint: Anthropic accepted the key and the
+/// chosen model exists for that account. It says nothing about the credit balance.
+public struct ClaudeKeyCheck: Sendable, Equatable {
+    public let modelID: String
+    public let modelName: String
+    public init(modelID: String, modelName: String) { self.modelID = modelID; self.modelName = modelName }
+}
+
+/// A failed Anthropic exchange, classified so the ViewModel can mark the key status without
+/// parsing message text. `message` is already safe to show: bounded, control characters removed,
+/// never containing the key.
+public struct ClaudeFailure: LocalizedError, Sendable, Equatable {
+    public enum Kind: Sendable, Equatable { case authentication, billing, model, rateLimit, service, network, invalidResponse, busy }
+    public let kind: Kind
+    public let message: String
+    public init(kind: Kind, message: String) { self.kind = kind; self.message = message }
+    public var errorDescription: String? { message }
+}
+
 public protocol ClaudeAdvising: Sendable {
     func analyze(_ packet: AIReviewPacket, model: ClaudeModel, apiKey: String) async throws -> AIAnalysis
+    /// One free GET against the Models endpoint. No scan data, no tokens.
+    func verify(apiKey: String, model: ClaudeModel) async throws -> ClaudeKeyCheck
     func clearCache() async
 }
 
@@ -115,10 +132,18 @@ public protocol ClaudeAdvising: Sendable {
     func remove() throws
 }
 
-/// Pure wire format and validation, independently tested without making API calls.
 public enum ClaudeMessages {
-    public static let maxOutputTokens = 1200
+    /// Claude 5.5 models think before answering and that reasoning counts toward `max_tokens`.
+    /// The plan itself stays bounded by the length checks in `decode`; this leaves room for both.
+    public static let maxOutputTokens = 4000
     public static let maxRequestBytes = 12_000
+    public static let maxResponseBytes = 64_000
+    public static let maxErrorDetailCharacters = 240
+    public static let apiVersion = "2026-10-21"
+    public static let messagesEndpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+    public static func modelEndpoint(_ model: ClaudeModel) -> URL {
+        URL(string: "https://api.anthropic.com/v1/models/\(model.rawValue)")!
+    }
     public static let systemPrompt = """
     You advise on a macOS cleanup scan. Return a concise English review plan, never commands or deletion instructions.
     Only the supplied aggregate groups exist. Their size is an allocated estimate, not guaranteed recoverable space.
@@ -143,7 +168,9 @@ public enum ClaudeMessages {
         let data = try JSONSerialization.data(withJSONObject: [
             "model": model.rawValue, "max_tokens": maxOutputTokens, "system": systemPrompt,
             "messages": [["role": "user", "content": packet.json]],
-            "output_config": ["format": ["type": "json_schema", "schema": schema]]
+            // Low effort: a short ranking does not need deep reasoning, and it keeps the
+            // reasoning tokens that count toward max_tokens small on both 5.5 models.
+            "output_config": ["effort": "low", "format": ["type": "json_schema", "schema": schema]]
         ], options: [.sortedKeys])
         guard data.count <= maxRequestBytes else { throw SafetyError.refused("The AI summary exceeds the request limit.") }
         return data
@@ -159,10 +186,14 @@ public enum ClaudeMessages {
         }
         struct Plan: Decodable { let summary: String; let recommendations: [AIRecommendation] }
         do {
-            guard data.count <= 64_000 else { throw SafetyError.refused("Oversized response") }
+            guard data.count <= maxResponseBytes else { throw SafetyError.refused("Oversized response") }
             let envelope = try JSONDecoder().decode(Envelope.self, from: data)
-            guard envelope.stop_reason == "end_turn", envelope.content.count == 1,
-                  envelope.content[0].type == "text", let text = envelope.content[0].text,
+            // Claude 5.5 models may answer with thinking blocks before the text. Read blocks by
+            // type, never by position, and accept exactly one text block.
+            let reasoning: Set<String> = ["thinking", "redacted_thinking"]
+            let texts = envelope.content.filter { $0.type == "text" }
+            guard envelope.stop_reason == "end_turn", texts.count == 1, let text = texts[0].text,
+                  envelope.content.allSatisfy({ $0.type == "text" || reasoning.contains($0.type) }),
                   envelope.usage.input_tokens >= 0, envelope.usage.output_tokens >= 0 else {
                 throw SafetyError.refused("Incomplete response")
             }
@@ -179,8 +210,63 @@ public enum ClaudeMessages {
             return AIAnalysis(summary: plan.summary, recommendations: plan.recommendations,
                               inputTokens: envelope.usage.input_tokens, outputTokens: envelope.usage.output_tokens)
         } catch {
-            // Never surface raw response/error bodies: they are untrusted and may echo input.
-            throw SafetyError.refused("Claude returned an incomplete or invalid plan. No selection or files were changed. A request may still have used credits.")
+            throw ClaudeFailure(kind: .invalidResponse,
+                message: "Claude returned an incomplete or invalid plan. No selection or files were changed. A request may still have used credits.")
         }
+    }
+
+    /// Maps a non-200 reply to a user-facing failure. Anthropic's error body names the exact
+    /// cause (`authentication_error: invalid x-api-key`, a credit balance that is too low, an
+    /// unknown model), so it is surfaced in sanitized form instead of being discarded.
+    public static func failure(status: Int, body: Data) -> ClaudeFailure {
+        struct Envelope: Decodable {
+            struct Detail: Decodable { let type: String?; let message: String? }
+            let error: Detail?
+        }
+        let detail = (try? JSONDecoder().decode(Envelope.self, from: body))?.error
+        let type = sanitize(detail?.type ?? "")
+        let message = sanitize(detail?.message ?? "")
+        let kind: ClaudeFailure.Kind
+        let hint: String
+        let action: String
+        switch status {
+        case 401:
+            kind = .authentication; hint = "Anthropic rejected the API key."; action = "Check the key in Settings."
+        case 403:
+            kind = .authentication; hint = "This API key is not allowed to use the service."; action = "Check the key's permissions in the Anthropic Console."
+        case 402:
+            kind = .billing; hint = "Anthropic reported a billing problem."; action = "Check Plans & Billing in the Anthropic Console."
+        case 400 where message.localizedCaseInsensitiveContains("credit"):
+            kind = .billing; hint = "The key works, but the account has no credits."; action = "Add credits in the Anthropic Console."
+        case 404:
+            kind = .model; hint = "The model is not available to this API key."; action = "Try the other model or update the app."
+        case 400, 413, 422:
+            kind = .model; hint = "Anthropic refused the request."; action = "Try the other model or update the app."
+        case 429:
+            kind = .rateLimit; hint = "Rate or spending limit reached."; action = "Check your Anthropic account before trying again."
+        case 529:
+            kind = .service; hint = "Anthropic is overloaded right now."; action = "Try again later."
+        default:
+            kind = .service; hint = "Anthropic returned HTTP \(status)."; action = "Try again later."
+        }
+        let cause = [type, message].filter { !$0.isEmpty }.joined(separator: ": ")
+        let lead = cause.isEmpty ? hint : "\(hint) (\(cause))."
+        return ClaudeFailure(kind: kind, message: "\(lead) \(action) No automatic retry was made.")
+    }
+
+    public static func decodeModel(_ data: Data, expected: ClaudeModel) throws -> ClaudeKeyCheck {
+        struct Model: Decodable { let id: String; let display_name: String? }
+        guard data.count <= maxResponseBytes, let model = try? JSONDecoder().decode(Model.self, from: data),
+              model.id == expected.rawValue else {
+            throw ClaudeFailure(kind: .invalidResponse, message: "Anthropic answered the key check with something unexpected. Try again later.")
+        }
+        let name = sanitize(model.display_name ?? "")
+        return ClaudeKeyCheck(modelID: model.id, modelName: name.isEmpty ? model.id : name)
+    }
+
+    /// Untrusted provider text: drop control characters and bound the length before display.
+    static func sanitize(_ text: String) -> String {
+        let flat = text.components(separatedBy: .controlCharacters).joined().trimmingCharacters(in: .whitespaces)
+        return String(flat.prefix(maxErrorDetailCharacters))
     }
 }

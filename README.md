@@ -172,14 +172,14 @@ real in-app updates. Update checks would be a separate network feature from the 
 
 ## Claude review (0.4)
 
-1. In **Settings → Claude**, paste your Anthropic API key and choose **Save to Keychain**.
-2. Run a normal scan, then open **Claude review**.
-3. Use Haiku 4.5 for economy, or choose Sonnet 5.5. Preview the exact scan-data payload, then click **Send summary to Claude**.
+1. In **Settings → Claude**, paste your Anthropic API key and choose **Save to Keychain**, then **Test key**. The test is one free request that confirms Anthropic accepts the key; it sends no scan data.
+2. Run a normal scan, then open **Claude review**. The key status is shown there too, and a line under the send button says why it is disabled, if it is.
+3. Use Haiku 5.5 for economy, or choose Sonnet 5.5. Preview the exact scan-data payload, then click **Send summary to Claude**.
 4. Review the advice and actual token usage. **Review these items** filters the local list; it does not select, delete or authorize anything.
 
 There is one bounded request, at most 16 aggregate groups, a 12 KB application request-body cap,
-and a 1,200-token output cap. There are no tool calls, chat history, automatic retries or model
-fallbacks. The most recent unchanged analysis is reused in memory; quitting clears that cache.
+and a 4,000-token output cap that includes the model's own reasoning. There are no tool calls,
+chat history, automatic retries or model fallbacks. Failures show Anthropic's own reason. The most recent unchanged analysis is reused in memory; quitting clears that cache.
 The byte cap is not an exact input-token or dollar limit: Anthropic adds structured-output overhead.
 The API account controls spending limits. No paid request is made just by saving a key or scanning.
 See [Claude integration](docs/CLAUDE.md) for the privacy boundary, sources and limitations.

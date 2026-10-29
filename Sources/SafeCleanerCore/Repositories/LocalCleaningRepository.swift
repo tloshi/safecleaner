@@ -36,8 +36,17 @@ import Foundation
               trimmed.utf8.allSatisfy({ $0 > 32 && $0 < 127 }) else {
             throw SafetyError.refused("Enter a valid Anthropic API key beginning with sk-ant-.")
         }
+        guard !trimmed.hasPrefix("sk-ant-admin") else {
+            throw SafetyError.refused("That is an Admin API key, which cannot send messages. Create a regular API key in the Anthropic Console.")
+        }
         try apiKeys.save(trimmed)
         await advisor?.clearCache()
+    }
+    public func verifyClaudeKey(model: ClaudeModel) async throws -> ClaudeKeyCheck {
+        guard let advisor, let key = try apiKeys?.read(), !key.isEmpty else {
+            throw SafetyError.refused("Save your Anthropic API key in Settings first.")
+        }
+        return try await advisor.verify(apiKey: key, model: model)
     }
     public func removeClaudeKey() async throws {
         guard let apiKeys else { return }

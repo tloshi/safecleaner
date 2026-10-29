@@ -96,10 +96,84 @@ import SafeCleanerCore
         let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "test",
                                     previewReport: .init(candidates: [fixture()]))
         await vm.start()
-        for action: WorkspaceAction in [.claudeKeyChanged("sk-ant-synthetic-test-key"), .saveClaudeKey, .removeClaudeKey, .analyzeWithClaude] {
+        for action: WorkspaceAction in [.claudeKeyChanged("sk-ant-synthetic-test-key"), .saveClaudeKey, .removeClaudeKey,
+                                        .analyzeWithClaude, .verifyClaudeKey, .navigate(.settings), .navigate(.assistant)] {
             await vm.send(action)?.value
         }
-        XCTAssertEqual(repository.aiCalls + repository.keyReads + repository.keyWrites, 0)
+        XCTAssertEqual(repository.aiCalls + repository.keyReads + repository.keyWrites + repository.verifyCalls, 0)
+        XCTAssertFalse(vm.state.canVerifyClaudeKey)
+    }
+
+    /// “Saved in Keychain” never answered whether Anthropic accepts the key. The check must be
+    /// visible, free of scan data, and must not lock the rest of the workspace.
+    func testKeyTestReportsAcceptanceOrRejectionWithoutSendingScanData() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        XCTAssertEqual(vm.state.claudeKeyTone, .missing)
+        XCTAssertFalse(vm.state.canVerifyClaudeKey)
+        XCTAssertNil(vm.send(.verifyClaudeKey))
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); await vm.send(.saveClaudeKey)?.value
+        XCTAssertEqual(vm.state.claudeKeyTone, .untested)
+        XCTAssertTrue(vm.state.canVerifyClaudeKey)
+        let check = vm.send(.verifyClaudeKey)
+        XCTAssertEqual(vm.state.claudeKeyTone, .checking)
+        XCTAssertTrue(vm.state.isVerifyingClaudeKey)
+        XCTAssertFalse(vm.state.canEditClaudeKey, "the key cannot be removed mid-check")
+        XCTAssertNil(vm.send(.verifyClaudeKey))
+        XCTAssertTrue(vm.state.canScan, "a key check is not a workspace-wide busy state")
+        await check?.value
+        XCTAssertEqual(vm.state.claudeKeyTone, .verified)
+        XCTAssertTrue(vm.state.claudeKeyStatus.contains("Claude Fixture"), vm.state.claudeKeyStatus)
+        XCTAssertEqual(repository.verifyCalls, 1)
+        XCTAssertEqual(repository.aiCalls, 0)
+        repository.verifyError = ClaudeFailure(kind: .authentication, message: "Anthropic rejected the API key.")
+        await vm.send(.verifyClaudeKey)?.value
+        XCTAssertEqual(vm.state.claudeKeyTone, .failed)
+        XCTAssertEqual(vm.state.claudeKeyDetail, "Anthropic rejected the API key.")
+        XCTAssertEqual(vm.state.message, "Anthropic rejected the API key.")
+        XCTAssertTrue(vm.state.hasClaudeKey, "a failed check does not remove the key")
+        XCTAssertTrue(vm.state.canVerifyClaudeKey)
+    }
+
+    func testAnalysisOutcomeUpdatesKeyStatusAndSendHintExplainsDisabledButton() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        XCTAssertEqual(vm.state.aiSendHint, "Add your Anthropic API key in Settings to enable this.")
+        vm.send(.claudeKeyChanged("sk-ant-synthetic-test-key")); await vm.send(.saveClaudeKey)?.value
+        XCTAssertEqual(vm.state.aiSendHint, "Scan first. Claude reviews the grouped scan results.")
+        repository.report = ScanReport(candidates: [fixture()])
+        await vm.send(.scan)?.value
+        XCTAssertNil(vm.state.aiSendHint)
+        XCTAssertTrue(vm.state.canAnalyze)
+        repository.aiError = ClaudeFailure(kind: .rateLimit, message: "Rate limit")
+        await vm.send(.analyzeWithClaude)?.value
+        XCTAssertEqual(vm.state.claudeKeyTone, .untested, "a rate limit says nothing about the key")
+        repository.aiError = ClaudeFailure(kind: .authentication, message: "Anthropic rejected the API key.")
+        await vm.send(.analyzeWithClaude)?.value
+        XCTAssertEqual(vm.state.claudeKeyTone, .failed)
+        repository.aiError = nil
+        await vm.send(.analyzeWithClaude)?.value
+        XCTAssertEqual(vm.state.claudeKeyTone, .verified, "a successful paid request proves the key")
+        XCTAssertNotNil(vm.state.aiSummary)
+    }
+
+    func testOpeningSettingsOrClaudeReviewNoticesKeysChangedOutsideTheApp() async {
+        let repository = FakeRepository()
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "9.9.9")
+        await vm.start()
+        XCTAssertFalse(vm.state.hasClaudeKey)
+        repository.hasKey = true
+        vm.send(.navigate(.overview))
+        XCTAssertFalse(vm.state.hasClaudeKey, "other screens do not touch Keychain")
+        vm.send(.navigate(.assistant))
+        XCTAssertTrue(vm.state.hasClaudeKey)
+        XCTAssertEqual(vm.state.claudeKeyTone, .untested)
+        repository.hasKey = false
+        vm.send(.navigate(.settings))
+        XCTAssertFalse(vm.state.hasClaudeKey)
+        XCTAssertEqual(vm.state.claudeKeyTone, .missing)
     }
 
     /// A history the build cannot read pauses cleanup. The view needs a flag, not just the
@@ -798,6 +872,13 @@ import SafeCleanerCore
         keyWrites += 1; hasKey = true
     }
     func removeClaudeKey() async throws { keyWrites += 1; hasKey = false }
+    var verifyCalls = 0
+    var verifyError: Error?
+    func verifyClaudeKey(model: ClaudeModel) async throws -> ClaudeKeyCheck {
+        verifyCalls += 1
+        if let verifyError { throw verifyError }
+        return .init(modelID: model.rawValue, modelName: "Claude Fixture")
+    }
     func analyzeWithClaude(_ packet: AIReviewPacket, model: ClaudeModel) async throws -> AIAnalysis {
         aiCalls += 1
         if let aiError { throw aiError }
