@@ -208,6 +208,14 @@ public struct DiskScanner: Sendable {
             try add(finding.url, title: finding.title, category: .xcode, root: finding.root,
                     reason: finding.reason, consequence: finding.consequence, owner: XcodeStores.owner)
         }
+        // Gradle and Kotlin/Native stores per version under ~/.gradle and ~/.konan: every version a
+        // project under the chosen folders names is kept, so is the newest installed; shared
+        // dependency caches, configuration and JDKs are never offered. Trash, Android Studio as owner.
+        let gradleReferences = GradleStores.references(projects: report.projects, fm: fm)
+        for finding in GradleStores.findings(home: c.home, references: gradleReferences, fm: fm, issues: &report.issues) {
+            try add(finding.url, title: finding.title, category: .gradle, root: finding.root,
+                    reason: finding.reason, consequence: finding.consequence, owner: GradleStores.owner)
+        }
         report.candidates.sort { $0.bytes > $1.bytes }
         report.projects.sort { $0.path < $1.path }
         report.finishedAt = Date()

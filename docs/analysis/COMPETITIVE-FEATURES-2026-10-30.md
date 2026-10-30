@@ -36,12 +36,12 @@ the UX around permissions and the weekly chore.
 Ordered by measured size here × safety fit. All are Trash moves unless stated.
 
 1. **Gradle per version** (30.6 GB here; 6 version caches, 13 wrapper versions pinned by
-   projects). Candidates: `~/.gradle/caches/<version>` not pinned by any
+   projects). *[Implemented in 0.5.4 as `GradleStores`; `jdks` is kept, `daemon/<version>` and `.tmp` are offered.]* Candidates: `~/.gradle/caches/<version>` not pinned by any
    `gradle-wrapper.properties` `distributionUrl` under the project roots; `~/.gradle/wrapper/dists/<dist>` likewise; `~/.gradle/jdks`, `~/.gradle/daemon`, `~/.gradle/.tmp`.
    Guard: no Gradle daemon running (`GradleDaemon` process). Consequence: the next build
    re-downloads and rebuilds; `modules-2` can be large. From eslamfaisal/mac-cleaner,
    cleardisk, mac-cleaner-cli (mac-cleanup-py takes the whole directory: do not copy).
-2. **Kotlin/Native per version** (11.1 GB here; 7 versions, catalogs reference 5).
+2. **Kotlin/Native per version** (11.1 GB here; 7 versions, catalogs reference 5). *[Implemented in 0.5.4; `~/.kotlin` is not touched.]*
    `~/.konan/kotlin-native-prebuilt-*-<version>` and `~/.konan/dependencies/*` not referenced
    by a `kotlin` version in any `libs.versions.toml` or Gradle file; `~/.kotlin` when the
    Kotlin daemon is stopped. From eslamfaisal/mac-cleaner.

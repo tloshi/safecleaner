@@ -101,7 +101,7 @@ Gjendjet e UI: pa skanim; duke skanuar; skanim i anuluar; pa rezultate; rezultat
 
 1. Nxirr rregullat në një katalog të versionuar: ID, rrugë, kushtet, përjashtimet, pasoja, pronari, mënyra e rikthimit dhe burimi i dokumentacionit.
 2. Zbulo rrugët reale nga konfigurimi i veglave; mos supozo vetëm vendndodhjet default.
-3. Gradle: ndaji build cache, dependency cache dhe distributions; mos e fshi krejt `.gradle`.
+3. Gradle: ndaji build cache, dependency cache dhe distributions; mos e fshi krejt `.gradle`. **[e implementuar në 0.5.4, shih më poshtë; Kotlin/Native po ashtu]**
 4. npm/yarn/pnpm: dallo store/cache nga konfigurimi, credentials dhe linked packages.
 5. Pub/Flutter: dallo cache të paketave nga global packages; ruaj SDK-të dhe burimet.
 6. Xcode: DerivedData sipas projektit; Archives, DeviceSupport dhe simulator runtimes si kategori të veçanta që kërkojnë shqyrtim. **[simulatorët: e implementuar në 0.5; DeviceSupport, dokumentacioni, device logs dhe arkivat: e implementuar në 0.5.2, shih më poshtë]**
@@ -130,7 +130,7 @@ të çdo AVD) dhe folderi `snapshots` i çdo AVD-je të fikur (kërkohet mungesa
 snapshot-i: `sdkmanager --uninstall` vetë vetëm fshin folderin, kështu që Trash është i njëjti
 veprim me rikthim. Kurrë `userdata-qemu.img*`, `sdcard.img`, `config.ini` ose vetë `.avd`.
 Pronari: Android Studio. SDK jashtë home nuk skanohet dhe raportohet. **Kufizime:** nuk prek
-`~/.gradle`, `~/.konan`, cache-t e Android Studio-s apo `platforms/`, `build-tools/`.
+cache-t e Android Studio-s apo `platforms/`, `build-tools/`; `~/.gradle` dhe `~/.konan` trajtohen në 0.5.4.
 
 **Xcode stores (0.5.2, 30 tetor 2026) — e implementuar:** simbolet e pajisjeve
 (`<platformë> DeviceSupport/<hyrje>`) për çdo version OS përveç më të riut për platformë (versioni
@@ -160,6 +160,27 @@ provon nga pema e burimit se vetëm një vend lëviz në Trash, asgjë nuk fshin
 procese, vetëm një flet me rrjetin dhe vetëm një lexon tabelën e proceseve. **Kufizime:**
 skedarët e hartuar në memorie (dylib të ngarkuara) nuk numërohen si të hapur; nuk ka ende
 njoftim periodik pa skanim, pamje "çfarë u rrit" apo etiketë "tipike / vendim i yti".
+
+**Gradle dhe Kotlin/Native (0.5.4, 30 tetor 2026) — e implementuar:** nën `~/.gradle`, për çdo
+version Gradle që asnjë projekt nën folderët e zgjedhur nuk e emërton në `distributionUrl` të
+`gradle-wrapper.properties` (ecet deri në 4 nivele nga çdo rrënjë e zbuluar; `build`, `node_modules`,
+`.gradle`, `.git` anashkalohen): `caches/<version>`, `wrapper/dists/gradle-<version>-bin|all` dhe
+`daemon/<version>`, plus folderi `.tmp` i tërë. Versioni më i ri i instaluar ruhet gjithmonë dhe
+referencat janë të sakta (8.14 nuk e mban 8.14.3). Nën `~/.konan`: përpiluesit
+`kotlin-native-prebuilt-macos-<arch>-<version>` që asnjë `libs.versions.toml` (`kotlin = "…"` nën
+`[versions]`), `build.gradle(.kts)` (`kotlin("…") version "…"`, `id("org.jetbrains.kotlin…") version "…"`)
+ose `gradle.properties` (`kotlin.version=`) nuk i emërton, duke ruajtur më të riun për arkitekturë;
+dhe hyrjet nën `dependencies/` (LLVM, sysroot, libffi) vetëm kur çdo përpilues i mbajtur ka një
+`konan/konan.properties` të lexueshëm dhe asnjëri nuk e emërton hyrjen (Kotlin/Native e rishkarkon një
+folder që mungon pavarësisht shënuesit `.extracted`). Kurrë: vetë `~/.gradle` dhe `~/.konan`,
+`caches/modules-2`, `caches/build-cache-1` (rregull më vete), `caches/jars-*`, `gradle.properties`,
+`init.d`, `jdks`, `kotlin-profile`, `dependencies/cache`. Të gjitha shkojnë në Trash përmes rrugës
+ekzistuese me pronar Android Studio; një version i hequr rishkarkohet nga build-i tjetër dhe një
+daemon që punon e mban folderin e vet të hapur (kontrolli i 0.5.3). Një wrapper ose build file
+versioni i të cilit nuk lexohet deklarohet në arsye. Fixtures pozitive/negative në
+`GradleStoresTests.swift`. **Kufizime:** `GRADLE_USER_HOME` dhe `KONAN_DATA_DIR` nuk lexohen;
+`~/.kotlin` (daemon-i i Kotlin-it), `~/.m2` dhe cache-t e Android Studio-s nuk preken; një projekt
+jashtë folderëve të zgjedhur nuk konsultohet, prandaj zgjidh rrënjët para se të pastrosh.
 
 **Docker:** inventar fillimisht. Volumes dhe të dhëna të containers nuk trajtohen si cache; asnjë komandë e përgjithshme prune pa listë konkrete dhe konfirmim.
 
@@ -214,7 +235,7 @@ njoftim periodik pa skanim, pamje "çfarë u rrit" apo etiketë "tipike / vendim
 2. Shqyrto “skipped locations” dhe kalibro rregullat për Mac-un tënd.
 3. Shto një root projektesh dhe verifiko rezultatet scan-only kundrejt Finder-it.
 4. Nxirr katalogun e rregullave në data të testueshme me provenance.
-5. Plotëso Gradle dhe Xcode, sepse në shembullin tënd përbënin shumicën e hapësirës.
+5. Plotëso Gradle dhe Xcode, sepse në shembullin tënd përbënin shumicën e hapësirës. **[Xcode: 0.5–0.5.2; Gradle dhe Kotlin/Native: 0.5.4]**
 6. Aktivizo pastrimin e projekteve vetëm pas validimit sipas framework-ut.
 7. Zgjero browser/AI rules; pastaj disk explorer, dublikata dhe rikthim në app.
 

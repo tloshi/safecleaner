@@ -164,6 +164,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
 - Before any move: items a running process holds open are left in place and the process named; items you cannot write are listed as not movable; nothing inside credential, mail or backup stores is ever offered; a move counts only once the source is gone (0.5.3).
+- Gradle version caches, wrapper distributions and daemon logs no project names (the newest installed stays) plus Gradle's temporary folder, and Kotlin/Native compilers and shared LLVM toolchains nothing names; `modules-2`, `build-cache-1`, configuration and JDKs are never offered (0.5.4).
 - Third-party immediate children of `~/Library/Caches`, individually reviewed; Apple caches are excluded.
 - Browser cache classification in user cache locations. Browser profiles are not targeted.
 - `.log` files under user logs that have not changed for over 30 days.
@@ -225,6 +226,24 @@ Four guards taken from the open-source cleaner survey, each with fixtures:
   files to Trash, nothing deletes, one place launches a process, one place talks to the network
   and one place reads process tables, and that views and presentation never touch the
   filesystem.
+
+## Gradle & Kotlin/Native (0.5.4)
+
+Scanning also lists, under `~/.gradle`, the per-version stores no project under your folders
+names in its `gradle-wrapper.properties`: the version cache (`caches/<version>`), the wrapper
+distribution (`wrapper/dists/gradle-<version>-bin|all`) and the daemon logs
+(`daemon/<version>`), plus the `.tmp` folder Gradle does not always empty. The newest installed
+version is always kept, and references are exact: a project on 8.14 does not keep 8.14.3. Under
+`~/.konan` it lists the Kotlin/Native compilers (`kotlin-native-prebuilt-macos-<arch>-<version>`)
+no version catalog, build file or `gradle.properties` names, keeping the newest per architecture,
+and the shared LLVM toolchains, sysroots and libraries under `dependencies/` that no remaining
+compiler names in its `konan.properties`. Never offered: `~/.gradle` and `~/.konan` themselves,
+`caches/modules-2` (downloaded dependencies), `caches/build-cache-1` (its own rule),
+`caches/jars-*`, `gradle.properties`, `init.d`, `jdks`, `kotlin-profile` and `dependencies/cache`.
+All of these move to Trash; a build whose version was removed downloads it again. A wrapper or
+build file whose version could not be read is stated on the row. Stop Gradle daemons
+(`./gradlew --stop`) and quit Android Studio before cleaning; a running daemon holds its files
+open and is left in place.
 
 ## Claude review (0.4)
 

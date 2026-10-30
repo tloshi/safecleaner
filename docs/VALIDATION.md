@@ -50,6 +50,54 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.4 — Gradle and Kotlin/Native per-version stores, 30 October 2026
+
+- Version-aware Trash candidates under `~/.gradle` and `~/.konan`, no process: per Gradle version
+  no project under the chosen folders names in its wrapper, the version cache, the wrapper
+  distribution and the daemon logs, plus Gradle's `.tmp`; Kotlin/Native compilers no catalog,
+  build file or `gradle.properties` names; shared `dependencies/` entries no remaining compiler's
+  `konan.properties` names. Measured read-only on the author's Mac with `~/AndroidStudioProjects`
+  as the project root (`/usr/bin/du -sk`, `/usr/bin/find`): `~/.gradle` is 32.8 GB and `~/.konan`
+  12.0 GB. Projects name 14 wrapper versions (7.6.2 to 9.6.0), which covers all six version caches
+  (8.14, 8.14.3, 9.1.0, 9.2.1, 9.4.1, 9.5.1; 19.4 GB together) and seven of the eight
+  distributions; the eighth, 9.7.1, is the newest and is kept. So from Gradle only the `.tmp`
+  folder (123 MB, 1,698 files) and the 5.4.1 daemon logs (8 KB) would be offered; the empty 9.0.0
+  daemon folder measures nothing and is dropped. Catalogs and build files name Kotlin 2.2.10,
+  2.3.0, 2.3.20, 2.4.0 and 2.4.10 (and 1.9.25, 2.2.21 and 2.3.21, which are not installed), so of
+  the seven compilers 2.2.0 (1.02 GB, 27,171 files) and 2.2.20 (1.23 GB) would be offered; 2.4.10
+  is also the newest. Of the five shared dependencies, LLVM 19 build 74 (482 MB) is named only by
+  2.2.0 and would be offered; builds 79 and 81, LLVM 21 build 97 and libffi are named by kept
+  compilers and stay. About 2.9 GB in all. `modules-2` (4.98 GB), `build-cache-1` (4.32 GB, its
+  own rule) and `jdks` (1.58 GB) are never offered. No hard links or special files were found in
+  the offered trees; five interior symlinks inside the compilers are counted, not followed. Every
+  real wrapper file sits two levels below its detected project root, within the four-level
+  reference walk.
+- **206 XCTest tests passed:** 144 core, 55 presentation, 7 service. New tests cover name parsing
+  (a shared cache never looks like a version, pre-release suffixes, distribution types, a wrapper
+  URL on any host, Intel and Apple-silicon compilers, another OS ignored, a release ordered after
+  its own pre-release), reference parsing (wrapper, catalog, Kotlin and Groovy DSL, `.version()`,
+  `kotlin-gradle-plugin:` coordinates, `gradle.properties`, comments and `kotlinx` libraries
+  ignored, `build/`-nested wrappers ignored, a project outside the roots not consulted, unresolved
+  variables flagged), the Gradle rule (named kept, newest kept, exact not prefix references, every
+  store, `.tmp`, everything named leaves only `.tmp`), the never-offer list (shared caches,
+  configuration, JDKs, the homes themselves), the Kotlin/Native rule (named kept, newest per
+  architecture kept, a `major.minor` reference keeps its patch releases, shared dependencies only
+  when no remaining compiler names them, token rather than substring matching, all kept with an
+  issue when a manifest is unreadable), scanner integration (category, owner, roots, exclusion of
+  a store and of a descendant inside a candidate, the `build-cache-1` rule untouched, nothing
+  never-offered listed, an empty folder dropped), absent and empty homes, and a single installed
+  version.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `GradleStores.swift`. Version 0.5.4 (11).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. That Gradle rebuilds a removed version cache and that
+  Kotlin/Native re-downloads a removed compiler or dependency was taken from their documented
+  behaviour (the dependency check in `DependencyProcessor.kt` reads the folder, not only the
+  `.extracted` marker), not exercised here. `GRADLE_USER_HOME` and `KONAN_DATA_DIR` are not read.
+  Notarization still waits for the author to re-store the notary keychain profile.
+
 ## 0.5.3 — safety pack: open-file check, verified moves, never-offer list, Full Disk Access follow-up, structural tests, 30 October 2026
 
 - **Open-file check.** `LibprocOpenFileService` reads, through libproc, every file descriptor,

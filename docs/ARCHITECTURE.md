@@ -139,6 +139,33 @@ Access pane; the view model reports the outcome at the next launch and the repos
 flag. `StructuralTests` read the `Sources` tree and pin the single Trash call, the absence of any
 delete, the single process launcher, the single network client and the single libproc reader.
 
+## Gradle and Kotlin/Native stores (0.5.4)
+
+`GradleStores` in Core is version-aware listing with no process, like `AndroidSDK`. `references`
+walks each detected project root four levels deep (skipping `build`, `node_modules`, `.gradle`,
+`.git` and hidden folders) and collects Gradle versions from `distributionUrl` in every
+`gradle-wrapper.properties` (the version in the zip's file name, whatever the host) and Kotlin
+versions from `[versions]` keys starting with `kotlin` in `*.versions.toml`, inline plugin versions
+and `org.jetbrains.kotlin:*:<version>` coordinates, `kotlin("…") version "…"`,
+`id("org.jetbrains.kotlin…") version "…"` and `kotlin-gradle-plugin:` in build and settings files,
+and `kotlin.version`-style keys in `gradle.properties`. A version taken from a variable (other than
+a catalog accessor) or a wrapper URL whose file name carries no version is flagged and stated in
+every reason. `findings` treats a folder as a Gradle version only when its name is a dotted number
+(`8.14.3`, `9.0.0-rc-1`), so `modules-2`, `jars-9` or `journal-1` can never match; keeps every
+referenced version exactly (no prefix matching, since 8.14 and 8.14.3 are different
+distributions) and the newest installed across caches, distributions and daemons; and offers
+`.tmp` whole. Kotlin/Native compilers are recognised by the
+`kotlin-native-prebuilt-macos-<arch>-<version>` name, kept when a reference matches exactly or as a
+`major.minor` prefix, and the newest per architecture is kept. `dependencies/<entry>` is offered
+only when every kept compiler has a readable `konan/konan.properties` and none of them names the
+entry as a whole token (Kotlin/Native re-downloads an entry whose folder is missing regardless of
+its `.extracted` marker); otherwise an issue says the shared dependencies were kept. A final filter
+drops any finding that is a store root itself, lies outside it, or touches
+`GradleStores.neverOffered` or a `jars-*` folder. Each finding becomes an ordinary Trash candidate
+through the scanner's `add` with Android Studio as owner, so exclusions, the never-offer list, the
+writability guard, the snapshot digest, the open-file check and the change re-check apply
+unchanged. `GRADLE_USER_HOME` and `KONAN_DATA_DIR` are not read; only the default homes are scanned.
+
 ## Optional Claude review (0.4)
 
 `AIReviewPacket` in Core groups candidates using a fixed label catalogue. The encoded payload
