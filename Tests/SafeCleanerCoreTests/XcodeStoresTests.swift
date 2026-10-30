@@ -62,7 +62,7 @@ final class XcodeStoresTests: XCTestCase {
         try file("Archives/2025-03-01/NoPlist 01.03.25, 09.00.xcarchive/Products/Applications/NoPlist.app/NoPlist", big)
         try file("Archives/notes.txt")
         try FileManager.default.createDirectory(at: xcode.appendingPathComponent("Archives/2026-07-15"), withIntermediateDirectories: true)
-        try file("DerivedData/App-abc/Build/Products/Debug/App.app/App", big)
+        try file("DerivedData/App-abcdefghijklmnopqrstuvwxyzab/Build/Products/Debug/App.app/App", big)
         try file("UserData/Provisioning Profiles/x.mobileprovision", big)
     }
 
@@ -138,7 +138,7 @@ final class XcodeStoresTests: XCTestCase {
             XCTAssertEqual(item.allowedRoot.path, xcode.path)
             XCTAssertGreaterThan(item.bytes, 0)
         }
-        XCTAssertTrue(report.candidates.contains { $0.title == "Xcode DerivedData" }, "the existing rule is untouched")
+        XCTAssertTrue(report.candidates.contains { $0.title == "App build data" }, "DerivedData is listed per project, not touched by this pass")
         XCTAssertFalse(report.candidates.contains { $0.url.path.contains("Provisioning Profiles") })
         let excluded = try DiskScanner().scan(configuration: .init(home: home, exclusions: [xcode.appendingPathComponent("iOS DeviceSupport")]))
         XCTAssertFalse(excluded.candidates.contains { $0.title.hasSuffix("device symbols") })

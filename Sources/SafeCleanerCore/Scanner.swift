@@ -72,7 +72,6 @@ public struct DiskScanner: Sendable {
         // Deliberately target cache subdirectories, not entire tool homes (.npm,
         // .gradle, etc.) that may also hold configuration or credentials.
         let developerRules: [(String, String, String?)] = [
-            ("Library/Developer/Xcode/DerivedData", "Xcode DerivedData", "com.apple.dt.Xcode"),
             ("Library/Caches/org.swift.swiftpm", "Swift package cache", "com.apple.dt.Xcode"),
             (".npm/_cacache", "npm package cache", nil),
             (".gradle/caches/build-cache-1", "Gradle build cache", "com.google.android.studio"),
@@ -84,6 +83,12 @@ public struct DiskScanner: Sendable {
             try add(c.home.appendingPathComponent(path), title: name, category: .developer, root: c.home,
                     reason: "Known developer cache location. Review before moving to Trash.",
                     consequence: "Future builds or installs may take longer and need internet. Stop related builds first.", owner: owner)
+        }
+        // DerivedData per project, so live projects can be kept and stale ones dropped: the
+        // whole folder was one 31 GB all-or-nothing item on the author's Mac.
+        for finding in DerivedData.findings(home: c.home, fm: fm) {
+            try add(finding.url, title: finding.title, category: .developer, root: finding.root,
+                    reason: finding.reason, consequence: finding.consequence, owner: DerivedData.owner)
         }
 
         if exists(cacheRoot) {

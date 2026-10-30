@@ -159,7 +159,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 
 - Real disk capacity and free-space display. No pre-populated fake scan results.
 - Read-only scanning with progress and cancellation.
-- Targeted developer-cache rules: Xcode DerivedData, SwiftPM, npm `_cacache`, Gradle `build-cache-1`, CocoaPods, Homebrew downloads and pip.
+- Targeted developer-cache rules: Xcode DerivedData per project (0.5.5), SwiftPM, npm `_cacache`, Gradle `build-cache-1`, CocoaPods, Homebrew downloads and pip.
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
@@ -201,6 +201,18 @@ received nothing new for 30 days; and archives older than 180 days. An archive i
 copy of a signed build and its symbols, so its row names the app, version and bundle
 identifier and says what symbolication is lost; nothing is ever preselected. All of these move
 to Trash. Quit Xcode before cleaning; while it is open these items are left in place.
+
+## DerivedData per project (0.5.5)
+
+Xcode's DerivedData is listed one row per project instead of one folder for all of them, so
+live projects stay and stale ones go. Each row names the workspace it was built for (from the
+folder's own `info.plist`), says when Xcode last built it (the newest build log or product,
+never the index, which changes on every edit) and says plainly when that workspace no longer
+exists. A folder without an `info.plist` is still listed under its folder name. The shared
+caches beside them (module cache, precompiled SDK modules, symbol cache, SDK stat cache,
+compilation cache) are their own rows with their own cost; anything else at that level is
+left alone. Quit Xcode before cleaning. The optional Claude review keeps the single fixed
+label "Xcode DerivedData" for all of them, so no project name leaves your Mac.
 
 ## Safety pack (0.5.3)
 

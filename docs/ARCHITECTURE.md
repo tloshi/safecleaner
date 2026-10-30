@@ -121,6 +121,20 @@ Xcode as owner, so exclusions, the snapshot digest, the running-owner check and 
 re-check apply unchanged. Archives are not regenerable, so the reason names the app, version,
 build and bundle identifier and the consequence says what symbolication is lost.
 
+## DerivedData per project (0.5.5)
+
+`DerivedData` in Core lists `~/Library/Developer/Xcode/DerivedData` one finding per project
+folder (`<Name>-<28 lowercase letters>`, recognised by the hash suffix) and one per known
+shared cache; unknown top-level folders are not nominated. A project finding reads
+`WorkspacePath` from the folder's `info.plist`, abbreviates it to `~/…`, says whether that
+path still exists, and dates the last build from the newest file directly under `Logs/Build`
+(one activity log per build) or anywhere under `Build`, never from `Index.noindex`. The
+scanner's developer pass no longer lists the whole folder; the findings go through `add` with
+the DerivedData folder as allowed root and Xcode as owner, so exclusions, the never-offer
+list, the writability guard, the snapshot digest and the open-file check apply unchanged.
+`AIReviewPacket` maps every candidate whose parent is `DerivedData` to the fixed label
+"Xcode DerivedData", so per-project folder names never enter the payload.
+
 ## Safety pack (0.5.3)
 
 `OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of

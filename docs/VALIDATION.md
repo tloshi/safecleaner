@@ -50,6 +50,35 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.5 — DerivedData per project with last-built age, 30 October 2026
+
+- The whole-folder "Xcode DerivedData" rule is replaced by one Trash candidate per project
+  folder (recognised by Xcode's 28-letter hash suffix) plus one per known shared cache.
+  Each project row names the workspace from `info.plist`, says whether it still exists and
+  dates the last build from the newest activity log under `Logs/Build` or file under `Build`,
+  never from the index. Measured read-only on the author's Mac: nine project folders, 31 GB:
+  netwrk-kmm as both `.xcworkspace` (6.3 GB) and `.xcodeproj` (4.6 GB), last built 3 days
+  ago; quitty `.xcodeproj` 5.9 GB, 11 days; fjaloriv2 `Runner.xcworkspace` 7.4 GB, 12 days,
+  and `Runner.xcodeproj` 224 MB, 20 days; two `iosApp` folders without an `info.plist`,
+  1.4 GB each, listed under their folder name; one 4 KB folder built for a scratchpad path
+  that no longer exists, which the row says; an empty `Pods` folder measures nothing and is
+  not listed. Shared caches: module cache 2.3 GB, precompiled SDK modules 1.4 GB, symbol cache
+  39 MB, SDK stat cache 3 MB, compilation cache 28 KB.
+- The Claude review packet maps every candidate under `DerivedData` to the fixed label
+  "Xcode DerivedData"; a test asserts the JSON contains neither the project nor the folder
+  name.
+- **212 XCTest tests passed:** 150 core, 55 presentation, 7 service. New tests cover hash
+  recognition (dashes in the name, short or uppercase suffixes rejected), workspace existence,
+  last-built from logs rather than the index, folders without a plist, empty folders, named
+  shared caches against unknown folders, scanner integration (whole folder gone, category,
+  owner, root, exclusions) and the packet label. `check-boundaries.py` passed. Native arm64
+  Debug `xcodebuild` succeeded. Project regenerated for `DerivedData.swift`. Version 0.5.5 (12).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. Which project Xcode has open is not detected; an
+  open Xcode still holds every DerivedData row in place through the owner check.
+
 ## 0.5.4 — Gradle and Kotlin/Native per-version stores, 30 October 2026
 
 - Version-aware Trash candidates under `~/.gradle` and `~/.konan`, no process: per Gradle version

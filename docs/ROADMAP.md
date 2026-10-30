@@ -145,6 +145,18 @@ atij build-i humbet; kurrë të parazgjedhura. Fixtures pozitive/negative në `X
 `DVTDownloads` apo `~/Library/Caches/com.apple.dt.Xcode`; versioni më i ri i simboleve mbahet edhe
 kur pajisja është përditësuar që atëherë.
 
+**DerivedData sipas projektit (0.5.5, 30 tetor 2026) — e implementuar:** `DerivedData` nuk
+ofrohet më si një folder i vetëm (31 GB në nëntë folderë në Mac-un e autorit, shtatë prej tyre
+aktivë), por një rresht për çdo folder projekti (`<Emër>-<28 shkronja>`): emri i workspace-it nga
+`info.plist` (`WorkspacePath`), nëse ai path ekziston ende, dhe data e build-it të fundit nga log-u
+më i ri nën `Logs/Build` ose skedari më i ri nën `Build` (kurrë nga `Index.noindex`, që ndryshon
+me çdo editim). Cache-t e përbashkëta (`ModuleCache.noindex`, `SDKExplicitPrecompiledModules`,
+`SymbolCache.noindex`, `SDKStatCaches.noindex`, `CompilationCache.noindex`) janë rreshta më vete
+me pasojën e tyre; folderët e panjohur në atë nivel nuk propozohen. Pronari: Xcode. Rishikimi
+opsional me Claude i grupon të gjitha nën etiketën fikse "Xcode DerivedData", pa emra
+projektesh. Fixtures në `DerivedDataTests.swift`. **Kufizime:** nuk dallon ende cilin projekt e
+ka hapur Xcode (Xcode i hapur bllokon tërë grupin); nuk ofron `Index.noindex` veçmas.
+
 **Paketa e sigurisë (0.5.3, 30 tetor 2026) — e implementuar:** (1) kontroll i skedarëve të hapur
 përmes libproc menjëherë para çdo lëvizjeje në Trash: nëse një proces i përdoruesit mban të hapur
 një skedar, folderin e punës ose ekzekutuesin brenda artikullit, artikulli lihet në vend dhe

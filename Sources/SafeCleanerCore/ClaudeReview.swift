@@ -33,6 +33,9 @@ public struct AIReviewPacket: Sendable {
                 return known ? "Project \(name)" : "Other project output"
             }
             if c.category == .developer {
+                // Per-project DerivedData folders carry project names; all of them share one
+                // fixed label, so no name leaves the Mac.
+                if c.url.deletingLastPathComponent().lastPathComponent == "DerivedData" { return "Xcode DerivedData" }
                 let known = ["DerivedData": "Xcode DerivedData", "org.swift.swiftpm": "SwiftPM cache",
                     "_cacache": "npm cache", "build-cache-1": "Gradle build cache", "CocoaPods": "CocoaPods cache",
                     "downloads": "Tool downloads", "pip": "Python package cache"]

@@ -132,4 +132,16 @@ final class ClaudeReviewTests: XCTestCase {
         XCTAssertThrowsError(try ClaudeMessages.decode(Data("not json".utf8), packet: packet))
         XCTAssertThrowsError(try ClaudeMessages.decode(Data(repeating: 32, count: 64_001), packet: packet))
     }
+
+    /// Per-project DerivedData folders carry project names. The packet keeps the fixed label
+    /// for all of them and never sends the folder or project name.
+    func testPerProjectDerivedDataKeepsTheFixedLabelAndLeaksNoProjectName() {
+        let packet = AIReviewPacket(candidates: [candidate("/private/customer-secret/DerivedData/Quitty-abcdefghijklmnopqrstuvwxyzab"),
+                                                 candidate("/private/customer-secret/DerivedData/ModuleCache.noindex")], skippedLocations: 0)
+        XCTAssertEqual(packet.groups.map(\.kind), ["Xcode DerivedData"])
+        XCTAssertEqual(packet.groups.first?.items, 2)
+        XCTAssertFalse(packet.json.contains("Quitty"))
+        XCTAssertFalse(packet.json.contains("ModuleCache"))
+    }
+
 }
