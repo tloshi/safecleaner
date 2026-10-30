@@ -54,7 +54,12 @@ public enum FileSafety {
         }
     }
 
-    public static func snapshot(_ url: URL, root: URL) throws -> TreeStamp {
+    /// `allowingHardLinks` is for build output only (pnpm-style installs hard-link files into
+    /// a store): such files are counted in the digest and the logical size but contribute
+    /// nothing to the allocated estimate, because moving one name frees nothing while another
+    /// remains. Everywhere else a hard link means a tool- or system-managed store and the
+    /// tree is refused for manual review, as before.
+    public static func snapshot(_ url: URL, root: URL, allowingHardLinks: Bool = false) throws -> TreeStamp {
         try validate(url, root: root)
         let fm = FileManager.default
         let base = try fm.attributesOfItem(atPath: url.path)
@@ -63,6 +68,8 @@ public enum FileSafety {
         var logical: Int64 = 0
         var allocated: Int64 = 0
         var count = 0
+        var linked: Int64 = 0
+        var linkedFiles = 0
         var visited = Set<String>()
 
         /// Returns the entry's type so `walk` knows whether to descend. Never follows a
@@ -107,16 +114,22 @@ public enum FileSafety {
                 throw SafetyError.refused("Cross-volume folders are excluded.")
             }
             let links = (attrs[.referenceCount] as? NSNumber)?.intValue ?? 1
-            if type == .typeRegular && links > 1 {
+            if type == .typeRegular && links > 1 && !allowingHardLinks {
                 throw SafetyError.refused("Hard-linked files need manual review.")
             }
-            let line = "\(entry.path)\u{0}\(inode)\u{0}\(size)\u{0}\(modified)\u{0}\(type?.rawValue ?? "")\n"
+            // The link count is part of the digest: a name added or removed elsewhere changes
+            // what moving this tree frees, so it must read as a change before the move.
+            let line = "\(entry.path)\u{0}\(inode)\u{0}\(size)\u{0}\(modified)\u{0}\(type?.rawValue ?? "")\u{0}\(links)\n"
             digest.update(data: Data(line.utf8))
             if type == .typeRegular && visited.insert(inode).inserted {
-                let values = try entry.resourceValues(forKeys: [.fileAllocatedSizeKey])
                 logical += size
-                allocated += Int64(values.fileAllocatedSize ?? Int(size))
                 count += 1
+                if links > 1 {
+                    linked += size; linkedFiles += 1
+                } else {
+                    let values = try entry.resourceValues(forKeys: [.fileAllocatedSizeKey])
+                    allocated += Int64(values.fileAllocatedSize ?? Int(size))
+                }
             }
             return type
         }
@@ -135,7 +148,8 @@ public enum FileSafety {
         }
         try walk(url)
         return TreeStamp(digest: digest.finalize().map { String(format: "%02x", $0) }.joined(),
-                         logicalBytes: logical, allocatedBytes: allocated, fileCount: count)
+                         logicalBytes: logical, allocatedBytes: allocated, fileCount: count,
+                         linkedBytes: linked, linkedFiles: linkedFiles)
     }
 }
 
@@ -162,7 +176,7 @@ public struct CleanupEngine {
             if let label = FileSafety.sensitiveLabel(for: candidate.url, home: FileManager.default.homeDirectoryForCurrentUser) {
                 throw SafetyError.refused("Inside \(label), which SafeCleaner never offers or moves.")
             }
-            let current = try FileSafety.snapshot(candidate.url, root: candidate.allowedRoot)
+            let current = try FileSafety.snapshot(candidate.url, root: candidate.allowedRoot, allowingHardLinks: candidate.allowsHardLinks)
             guard current == candidate.stamp else { throw SafetyError.changedSinceScan }
             // Recheck the root chain immediately before moving. This is best-effort
             // protection against ordinary changes, not a hostile-process sandbox.

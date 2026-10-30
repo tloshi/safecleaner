@@ -163,6 +163,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
+- Build output with hard-linked files (pnpm-style installs) is offered instead of refused, with only its unique bytes counted and the link count on the row; hard links elsewhere still mean manual review (0.5.10).
 - Duplicates: byte-identical files of 1 MB or more in folders you choose and in your project folders, every copy but one offered, the original kept (0.5.9).
 - Stale projects: each project's last edit, commit and build read locally, a Stale badge after 60 idle days, a one-step selection of stale projects' build output, and anonymized project rows for the Claude review (0.5.8).
 - Docker images no container uses, stopped containers and build cache idle for 30 days, each removed by the docker command by ID, never volumes, never a bare prune (0.5.7).
@@ -264,6 +265,17 @@ reason names the kept file; nothing is preselected. Hard links are one file, not
 symbolic links, packages such as photo libraries, hidden entries, dependencies, build output
 and the never-offer list are left out. The walk and the bytes hashed are capped, and reaching
 a cap is reported, never hidden.
+
+## Hard-linked build output (0.5.10)
+
+pnpm and similar installers hard-link files into a shared store, and until now any folder
+holding a hard link was refused for manual review. Build output nominated beside a project
+manifest is now measured with hard links allowed: such files stay in the digest and the
+logical size but add nothing to the allocated estimate, because moving one name frees
+nothing while another remains, and the row says how many files that affects. The link count
+is part of the digest, so a name added or removed elsewhere reads as a change before the
+move. Everywhere else a hard link still means a tool- or system-managed store, and the
+folder is still refused.
 
 ## Safety pack (0.5.3)
 

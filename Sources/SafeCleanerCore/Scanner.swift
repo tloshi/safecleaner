@@ -37,7 +37,8 @@ public struct DiskScanner: Sendable {
             }
         }
         func add(_ url: URL, title: String, category: CleanCategory, root: URL,
-                 reason: String, consequence: String, canTrash: Bool = true, owner: String? = nil) throws {
+                 reason: String, consequence: String, canTrash: Bool = true, owner: String? = nil,
+                 allowsHardLinks: Bool = false) throws {
             try Task.checkCancellation()
             guard !excluded(url), exists(url) else { return }
             // A floor under every rule, including a project root pointed at a credential folder.
@@ -53,7 +54,7 @@ public struct DiskScanner: Sendable {
             guard !report.candidates.contains(where: { $0.url == url || FileSafety.isInside(url, root: $0.url) }) else { return }
             progress(title)
             do {
-                let stamp = try FileSafety.snapshot(url, root: root)
+                let stamp = try FileSafety.snapshot(url, root: root, allowingHardLinks: allowsHardLinks)
                 guard stamp.logicalBytes > 0 else { return }
                 // An item this user cannot write is still measured and listed, but never
                 // selectable: the cleanup-time ownership error would only repeat this, and
@@ -64,9 +65,10 @@ public struct DiskScanner: Sendable {
                     && (!isDirectory || fm.isWritableFile(atPath: url.path))
                 let blocker = writable ? nil
                     : "Owned by another user or read-only, so it cannot move to Trash from here; SafeCleaner does not ask for administrator rights."
+                let linked = stamp.linkedFiles == 0 ? "" : " \(stamp.linkedFiles) \(stamp.linkedFiles == 1 ? "file is a hard link" : "files are hard links") into a package store (\(byteLabel(stamp.linkedBytes))); moving them frees nothing for those files."
                 report.candidates.append(Candidate(url: url, title: title, category: category,
-                    reason: reason, consequence: consequence, stamp: stamp, allowedRoot: root,
-                    canTrash: canTrash && writable, ownerBundleID: owner, blocker: blocker))
+                    reason: reason + linked, consequence: consequence, stamp: stamp, allowedRoot: root,
+                    canTrash: canTrash && writable, ownerBundleID: owner, blocker: blocker, allowsHardLinks: allowsHardLinks))
             } catch is CancellationError { throw CancellationError() }
             catch { report.issues.append(.init(path: url.path, message: error.localizedDescription)) }
         }
@@ -193,7 +195,8 @@ public struct DiskScanner: Sendable {
                             let idle = BuildOutput.idleDays(child)
                             try add(child, title: "\(directory.lastPathComponent) / \(name)", category: .projects, root: root,
                                     reason: "\(rule.label.prefix(1).uppercased() + rule.label.dropFirst()) beside \(name == "__pycache__" ? "Python sources" : "its project manifest"). \(BuildOutput.idleLabel(idle))",
-                                    consequence: rule.consequence + " Close the editor and stop any running build first.")
+                                    consequence: rule.consequence + " Close the editor and stop any running build first.",
+                                    allowsHardLinks: true)
                             continue
                         }
                         guard values.isPackage != true else { continue }

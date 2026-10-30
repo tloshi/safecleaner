@@ -82,11 +82,26 @@ public enum RemovalMethod: String, Codable, Sendable {
 public struct TreeStamp: Codable, Equatable, Sendable {
     public let digest: String
     public let logicalBytes: Int64
+    /// What moving the tree frees: hard-linked files are left out, since another name keeps their data.
     public let allocatedBytes: Int64
     public let fileCount: Int
-    public init(digest: String, logicalBytes: Int64, allocatedBytes: Int64, fileCount: Int) {
+    /// Regular files with more than one name, counted once each; absent in older stamps.
+    public let linkedBytes: Int64
+    public let linkedFiles: Int
+    public init(digest: String, logicalBytes: Int64, allocatedBytes: Int64, fileCount: Int, linkedBytes: Int64 = 0, linkedFiles: Int = 0) {
         self.digest = digest; self.logicalBytes = logicalBytes
         self.allocatedBytes = allocatedBytes; self.fileCount = fileCount
+        self.linkedBytes = linkedBytes; self.linkedFiles = linkedFiles
+    }
+    private enum CodingKeys: String, CodingKey { case digest, logicalBytes, allocatedBytes, fileCount, linkedBytes, linkedFiles }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        digest = try c.decode(String.self, forKey: .digest)
+        logicalBytes = try c.decode(Int64.self, forKey: .logicalBytes)
+        allocatedBytes = try c.decode(Int64.self, forKey: .allocatedBytes)
+        fileCount = try c.decode(Int.self, forKey: .fileCount)
+        linkedBytes = try c.decodeIfPresent(Int64.self, forKey: .linkedBytes) ?? 0
+        linkedFiles = try c.decodeIfPresent(Int.self, forKey: .linkedFiles) ?? 0
     }
 }
 
@@ -108,14 +123,17 @@ public struct Candidate: Identifiable, Codable, Sendable {
     /// write it, and the app does not ask for administrator rights. Listed so the bytes are
     /// not silently missing from the picture.
     public let blocker: String?
+    /// Measured with hard links allowed (build output only): the engine re-measures the same way.
+    public let allowsHardLinks: Bool
     public var bytes: Int64 { stamp.allocatedBytes }
     public init(url: URL, title: String, category: CleanCategory, reason: String,
                 consequence: String, stamp: TreeStamp, allowedRoot: URL,
-                canTrash: Bool, ownerBundleID: String?, removal: ToolRemoval? = nil, blocker: String? = nil) {
+                canTrash: Bool, ownerBundleID: String?, removal: ToolRemoval? = nil, blocker: String? = nil,
+                allowsHardLinks: Bool = false) {
         self.url = url; self.title = title; self.category = category
         self.reason = reason; self.consequence = consequence; self.stamp = stamp
         self.allowedRoot = allowedRoot; self.canTrash = canTrash; self.ownerBundleID = ownerBundleID
-        self.removal = removal; self.blocker = blocker
+        self.removal = removal; self.blocker = blocker; self.allowsHardLinks = allowsHardLinks
     }
 }
 

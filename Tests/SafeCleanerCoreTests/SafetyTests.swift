@@ -386,4 +386,69 @@ final class SafetyTests: XCTestCase {
         let fine = try XCTUnwrap(report.candidates.first { $0.url.lastPathComponent == "com.example.fine" })
         XCTAssertTrue(fine.canTrash); XCTAssertNil(fine.blocker)
     }
+
+    // MARK: Hard-linked build output (0.5.10)
+
+    /// pnpm-style installs hard-link files into a store. Moving such a folder to Trash removes
+    /// names, not data, so it is safe, and the estimate must say that those bytes stay.
+    private func hardLinkedProject() throws -> URL {
+        try file("projects/app/package.json", data: "{}")
+        let a = try file("projects/app/node_modules/pkg/a.js", data: String(repeating: "a", count: 8_192))
+        try FileManager.default.linkItem(at: a, to: home.appendingPathComponent("projects/app/node_modules/pkg/b.js"))
+        try file("projects/app/node_modules/plain.js", data: String(repeating: "p", count: 4_096))
+        return home.appendingPathComponent("projects/app/node_modules")
+    }
+
+    func testHardLinkedBuildOutputIsListedWithUniqueBytesAndSaysSo() throws {
+        let modules = try hardLinkedProject()
+        let report = try DiskScanner().scan(configuration: .init(home: home, projectRoots: [home.appendingPathComponent("projects")]))
+        let item = try XCTUnwrap(report.candidates.first { FileSafety.isSame($0.url, modules) }, "\(report.issues.map(\.message))")
+        XCTAssertTrue(item.allowsHardLinks)
+        XCTAssertEqual(item.stamp.linkedBytes, 8_192)
+        XCTAssertEqual(item.stamp.linkedFiles, 1, "one file under two names")
+        XCTAssertEqual(item.stamp.logicalBytes, 12_288)
+        XCTAssertGreaterThanOrEqual(item.bytes, 4_096)
+        XCTAssertLessThan(item.bytes, 8_192, "the linked file frees nothing, so it is not in the allocated estimate")
+        XCTAssertTrue(item.reason.contains("hard link"), item.reason)
+        XCTAssertFalse(report.issues.contains { $0.path == modules.path })
+    }
+
+    func testHardLinksStayRefusedOutsideBuildOutput() throws {
+        let a = try file("Library/Caches/com.example.store/a.bin", data: String(repeating: "a", count: 8_192))
+        try FileManager.default.linkItem(at: a, to: home.appendingPathComponent("Library/Caches/com.example.store/b.bin"))
+        let report = try DiskScanner().scan(configuration: .init(home: home))
+        XCTAssertFalse(report.candidates.contains { $0.url.lastPathComponent == "com.example.store" })
+        XCTAssertTrue(report.issues.contains { $0.message.contains("Hard-linked") }, "\(report.issues.map(\.message))")
+        XCTAssertThrowsError(try FileSafety.snapshot(a.deletingLastPathComponent(), root: home), "the default policy is unchanged")
+    }
+
+    func testEngineUsesTheCandidatesPolicyAndRefusesAChangedLinkCount() throws {
+        let modules = try hardLinkedProject()
+        let report = try DiskScanner().scan(configuration: .init(home: home, projectRoots: [home.appendingPathComponent("projects")]))
+        let item = try XCTUnwrap(report.candidates.first { FileSafety.isSame($0.url, modules) })
+        try FileManager.default.linkItem(at: modules.appendingPathComponent("pkg/a.js"), to: modules.appendingPathComponent("pkg/c.js"))
+        var called = false
+        let changed = CleanupEngine(trash: { _ in called = true; return nil }).perform(item)
+        XCTAssertFalse(called)
+        XCTAssertEqual(changed.failure, .changed, "a third link appeared since the scan")
+        try FileManager.default.removeItem(at: modules.appendingPathComponent("pkg/c.js"))
+        // Adding and removing a name changed the folder's date too, so a fresh scan is needed,
+        // exactly as the app tells the user; the fresh candidate then moves with its policy.
+        let rescan = try DiskScanner().scan(configuration: .init(home: home, projectRoots: [home.appendingPathComponent("projects")]))
+        let fresh = try XCTUnwrap(rescan.candidates.first { FileSafety.isSame($0.url, modules) })
+        XCTAssertEqual(fresh.stamp.linkedFiles, 1)
+        let target = home.appendingPathComponent("test-trash")
+        let moved = CleanupEngine(trash: { source in try FileManager.default.moveItem(at: source, to: target); return target }).perform(fresh)
+        XCTAssertNil(moved.error, moved.error ?? "")
+        XCTAssertEqual(moved.bytes, fresh.bytes)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modules.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: target.appendingPathComponent("pkg/b.js").path))
+    }
+
+    func testTreeStampDecodesWithoutTheLinkFields() throws {
+        let old = Data("{\"digest\":\"x\",\"logicalBytes\":10,\"allocatedBytes\":12,\"fileCount\":1}".utf8)
+        let stamp = try JSONDecoder().decode(TreeStamp.self, from: old)
+        XCTAssertEqual(stamp.linkedBytes, 0); XCTAssertEqual(stamp.linkedFiles, 0)
+        XCTAssertEqual(stamp.allocatedBytes, 12)
+    }
 }

@@ -50,6 +50,34 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.10 — hard-linked build output offered with unique bytes, 30 October 2026
+
+- Build output nominated beside a project manifest is measured with hard links allowed: a
+  file with more than one name is counted once in `linkedBytes`/`linkedFiles`, stays in the
+  logical size and the digest (with its link count), and adds nothing to the allocated
+  estimate; the row says how many files that affects. Every other category still refuses
+  hard links. The engine re-measures with the candidate's own policy, so the digests compare
+  like for like, and a link added or removed since the scan reads as changed.
+- Measured read-only on the author's Mac with the app's Core code over
+  `~/AndroidStudioProjects` (83 s whole scan): nine `node_modules` folders that were refused
+  before are listed now, 4.01 GB of unique bytes, with only 219 MB in 1–2 hard-linked files
+  each (native binaries such as esbuild). Five of those folders belong to stale projects
+  (kent-rag-avatar, swizz, appbuilder, deprecated myfidro), so "Select stale build output"
+  now has about 3 GB to offer here. The one remaining hard-link refusal is
+  `~/Library/Caches/GeoServices`, a system cache, which is the intended outcome.
+- **244 XCTest tests passed:** 178 core, 59 presentation, 7 service. New tests cover the
+  listed folder's unique bytes, linked bytes and file count, the reason sentence, the
+  unchanged refusal under `Library/Caches` and in the default `snapshot`, the engine refusing
+  a changed link count and moving a fresh candidate with its policy, and a stamp decoding
+  without the new fields.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated.
+  Version 0.5.10 (17).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. Whether the hard links point into a pnpm store or
+  elsewhere is not determined; their bytes are simply not counted as freed.
+
 ## 0.5.9 — duplicate files by content hash, 30 October 2026
 
 - Exact duplicates (size, partial hash, full SHA-256) in the project roots and the new

@@ -197,6 +197,16 @@ allowed root, so exclusions, the writability guard and the snapshot digest apply
 `ScanConfiguration.duplicateRoots` and the repository's `addDuplicateFolders` /
 `removeDuplicateFolder` mirror project roots, persisted under `duplicateRoots`.
 
+## Hard-linked build output (0.5.10)
+
+`FileSafety.snapshot(_:root:allowingHardLinks:)` defaults to refusing a regular file with more
+than one name. With the flag, the file is counted once per inode in `TreeStamp.linkedBytes`
+and `linkedFiles`, kept in `logicalBytes` and `fileCount`, and left out of `allocatedBytes`;
+its link count joins the digest line. The scanner passes the flag only for `.projects`
+candidates from `BuildOutput`, appends the link sentence to the reason, and records the
+policy on `Candidate.allowsHardLinks`, which `CleanupEngine.perform` uses for its own
+re-measure so the digests compare like for like. `TreeStamp` decodes without the new fields.
+
 ## Safety pack (0.5.3)
 
 `OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of

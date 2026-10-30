@@ -180,6 +180,16 @@ build-i, MB, committed) dhe emri shtohet lokalisht në përgjigje. Fixtures në
 `ProjectActivityTests.swift`. **Kufizime:** nuk lexon `git status` (ndryshimet e pakomituara
 nxirren nga datat e skedarëve kundrejt commit-it); nuk ka ende model në pajisje.
 
+**Hard links në build output (0.5.10, 30 tetor 2026) — e implementuar:** instalimet e tipit
+pnpm lidhin skedarët me hard link në një store; deri tani çdo folder me një hard link
+refuzohej. Output-i i build-it pranë një manifesti projekti matet tani me hard links të lejuara:
+skedarët e tillë mbeten në digest dhe në madhësinë logjike, por nuk shtojnë asgjë në vlerësimin
+e alokuar (lëvizja e një emri nuk liron asgjë sa kohë mbetet tjetri), dhe rreshti thotë sa
+skedarë prek. Numri i lidhjeve është pjesë e digest-it, kështu një emër i shtuar ose i hequr
+diku tjetër lexohet si ndryshim para lëvizjes. Kudo tjetër një hard link vazhdon të refuzohet.
+Fixtures në `SafetyTests.swift`. **Kufizime:** nuk dallon store-in e pnpm-it nga lidhje të
+tjera; thjesht nuk i numëron bajtet e lidhura.
+
 **Paketa e sigurisë (0.5.3, 30 tetor 2026) — e implementuar:** (1) kontroll i skedarëve të hapur
 përmes libproc menjëherë para çdo lëvizjeje në Trash: nëse një proces i përdoruesit mban të hapur
 një skedar, folderin e punës ose ekzekutuesin brenda artikullit, artikulli lihet në vend dhe
