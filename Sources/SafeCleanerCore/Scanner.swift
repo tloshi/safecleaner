@@ -188,6 +188,12 @@ public struct DiskScanner: Sendable {
             try add(finding.url, title: finding.title, category: .android, root: finding.root,
                     reason: finding.reason, consequence: finding.consequence, owner: AndroidSDK.owner)
         }
+        // Xcode's per-version stores: device symbols older than the newest per OS, documentation
+        // indexes, device logs idle 30 days and archives older than 180 days. Trash, Xcode as owner.
+        for finding in XcodeStores.findings(home: c.home, fm: fm) {
+            try add(finding.url, title: finding.title, category: .xcode, root: finding.root,
+                    reason: finding.reason, consequence: finding.consequence, owner: XcodeStores.owner)
+        }
         report.candidates.sort { $0.bytes > $1.bytes }
         report.projects.sort { $0.path < $1.path }
         report.finishedAt = Date()

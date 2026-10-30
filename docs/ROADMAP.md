@@ -104,7 +104,7 @@ Gjendjet e UI: pa skanim; duke skanuar; skanim i anuluar; pa rezultate; rezultat
 3. Gradle: ndaji build cache, dependency cache dhe distributions; mos e fshi krejt `.gradle`.
 4. npm/yarn/pnpm: dallo store/cache nga konfigurimi, credentials dhe linked packages.
 5. Pub/Flutter: dallo cache të paketave nga global packages; ruaj SDK-të dhe burimet.
-6. Xcode: DerivedData sipas projektit; Archives, DeviceSupport dhe simulator runtimes si kategori të veçanta që kërkojnë shqyrtim. **[simulatorët: e implementuar në 0.5, shih më poshtë]**
+6. Xcode: DerivedData sipas projektit; Archives, DeviceSupport dhe simulator runtimes si kategori të veçanta që kërkojnë shqyrtim. **[simulatorët: e implementuar në 0.5; DeviceSupport, dokumentacioni, device logs dhe arkivat: e implementuar në 0.5.2, shih më poshtë]**
 7. Projektet: konfirmo framework-un, build directory custom, procese aktive, Git-tracked files dhe lokale të modifikuara. Vetëm pastaj aktivizo Trash për kategori të miratuara.
 8. Shto adapterë zyrtarë për simulatorë dhe Docker kur fshirja direkte e folderëve s’është veprimi i duhur. **[simulatorët: e implementuar në 0.5; Docker: e planifikuar]**
 
@@ -131,6 +131,19 @@ snapshot-i: `sdkmanager --uninstall` vetë vetëm fshin folderin, kështu që Tr
 veprim me rikthim. Kurrë `userdata-qemu.img*`, `sdcard.img`, `config.ini` ose vetë `.avd`.
 Pronari: Android Studio. SDK jashtë home nuk skanohet dhe raportohet. **Kufizime:** nuk prek
 `~/.gradle`, `~/.konan`, cache-t e Android Studio-s apo `platforms/`, `build-tools/`.
+
+**Xcode stores (0.5.2, 30 tetor 2026) — e implementuar:** simbolet e pajisjeve
+(`<platformë> DeviceSupport/<hyrje>`) për çdo version OS përveç më të riut për platformë (versioni
+lexohet si numri i parë me pika në emrin e folderit; dy pajisje me të njëjtin version mbahen të
+dyja), çdo indeks nën `DocumentationCache`, çdo folder pajisjeje nën `DeviceLogs` /
+`iOS Device Logs` skedari më i ri i të cilit është 30 ditë i vjetër, dhe çdo `.xcarchive` 180 ditë
+i vjetër sipas `CreationDate` në `Info.plist` (ose emrit të folderit me datë). Të gjitha shkojnë në
+Trash përmes rrugës ekzistuese me pronar Xcode. Arkivat nuk rigjenerohen: arsyeja emërton
+aplikacionin, versionin, build-in dhe bundle ID-në, pasoja thotë se simbolizimi i crash-eve të
+atij build-i humbet; kurrë të parazgjedhura. Fixtures pozitive/negative në `XcodeStoresTests.swift`.
+**Kufizime:** nuk prek `Products/`, `UserData/Previews`, `XCTestDevices`, `XCPGDevices`,
+`DVTDownloads` apo `~/Library/Caches/com.apple.dt.Xcode`; versioni më i ri i simboleve mbahet edhe
+kur pajisja është përditësuar që atëherë.
 
 **Docker:** inventar fillimisht. Volumes dhe të dhëna të containers nuk trajtohen si cache; asnjë komandë e përgjithshme prune pa listë konkrete dhe konfirmim.
 

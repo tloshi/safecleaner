@@ -50,6 +50,35 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.2 — Xcode device symbols, documentation indexes, device logs and archives, 30 October 2026
+
+- Version-aware Trash candidates under `~/Library/Developer/Xcode`, no process: device
+  symbols below the newest OS version per platform, every documentation index, per-device
+  logs whose newest file is 30 days old, archives 180 days old by their `Info.plist` creation
+  date. Measured read-only on the author's Mac: the one `iOS DeviceSupport` entry
+  (iPhone15,3 26.5.2, 5.6 GB) is the newest and is kept; the four archives (514 MB) are 3 to
+  68 days old and are kept; there is no documentation cache; one device-log folder whose
+  reports were last copied on 17 September (1 MB) would be offered. No hard links or special
+  files were found in those trees.
+- **172 XCTest tests passed:** 115 core, 52 presentation, 5 service. New tests cover version
+  and build parsing of DeviceSupport names (a model identifier is never a version), the
+  newest-per-platform rule (both devices on the newest version kept, a lone watchOS version
+  kept, unversioned folders skipped), documentation indexes (schema folder descended, loose
+  files ignored), device logs (per device, 30-day idle by newest file, UDID stripped from the
+  title, the legacy `iOS Device Logs` folder), archives (keep period, app/version/build/bundle
+  ID from `Info.plist`, folder-name date fallback, empty date folders and loose files never
+  findings, a date folder never a finding), scanner integration (category, owner, root,
+  exclusions, DerivedData rule untouched, provisioning profiles never listed) and an absent or
+  empty Xcode folder.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `XcodeStores.swift`. Version 0.5.2 (9).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. Whether Xcode re-copies symbols from a device that
+  has since updated past a removed version was not exercised; the newest version is kept
+  regardless, so a removed entry is always older than one Xcode already has.
+
 ## 0.5.1 — Android NDK, system images and emulator snapshots, 30 October 2026
 
 - Version-aware Trash candidates, no process: NDK versions no project names except the newest

@@ -162,6 +162,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Targeted developer-cache rules: Xcode DerivedData, SwiftPM, npm `_cacache`, Gradle `build-cache-1`, CocoaPods, Homebrew downloads and pip.
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
+- Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
 - Third-party immediate children of `~/Library/Caches`, individually reviewed; Apple caches are excluded.
 - Browser cache classification in user cache locations. Browser profiles are not targeted.
 - `.log` files under user logs that have not changed for over 30 days.
@@ -187,6 +188,17 @@ Scanning also lists NDK versions no project under your folders names (the newest
 stays), system images no virtual device uses, and the quick-boot snapshots of stopped
 emulators. These move to Trash like other items, which is what SDK Manager's uninstall does
 minus the way back. Device user data and configuration are never listed.
+
+## Xcode stores (0.5.2)
+
+Scanning also lists Xcode's per-version stores under `~/Library/Developer/Xcode`: device
+symbols (`iOS DeviceSupport` and the other platforms) for every OS version except the newest
+per platform, which Xcode copies from a device again when it is next connected; documentation
+indexes, rebuilt the next time the documentation window opens; per-device crash logs that
+received nothing new for 30 days; and archives older than 180 days. An archive is the only
+copy of a signed build and its symbols, so its row names the app, version and bundle
+identifier and says what symbolication is lost; nothing is ever preselected. All of these move
+to Trash. Quit Xcode before cleaning; while it is open these items are left in place.
 
 ## Claude review (0.4)
 

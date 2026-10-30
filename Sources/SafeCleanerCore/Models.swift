@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable {
-    case developer, applications, browsers, logs, projects, simulators, android
+    case developer, applications, browsers, logs, projects, simulators, android, xcode
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -12,6 +12,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .projects: return "Project builds"
         case .simulators: return "Simulators"
         case .android: return "Android SDK"
+        case .xcode: return "Xcode stores"
         }
     }
     public var symbol: String {
@@ -23,6 +24,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .projects: return "folder.badge.gearshape"
         case .simulators: return "iphone"
         case .android: return "shippingbox"
+        case .xcode: return "wrench.adjustable"
         }
     }
     public var detail: String {
@@ -34,6 +36,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .projects: return "Generated folders in projects you choose"
         case .simulators: return "Runtimes and devices unused for 30 days, removed by Xcode's simctl"
         case .android: return "NDK versions and system images nothing names, and emulator snapshots"
+        case .xcode: return "Older device symbols, documentation indexes, idle device logs and archives over 180 days old"
         }
     }
 }

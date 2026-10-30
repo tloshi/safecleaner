@@ -108,6 +108,19 @@ device uses, and the `snapshots` folder of every stopped AVD. Each finding becom
 ordinary Trash candidate through the scanner's `add`, so exclusions, the snapshot digest,
 the running-owner check (Android Studio) and the change re-check all apply unchanged.
 
+## Xcode per-version stores (0.5.2)
+
+`XcodeStores` in Core lists four stores under `~/Library/Developer/Xcode` with no process:
+`<platform> DeviceSupport/<entry>` for every OS version below the newest per platform (the
+version is the first dotted number in the folder name, so a model identifier never counts and
+two devices on the same version are both kept); each index under `DocumentationCache`; each
+device folder under `DeviceLogs` or `iOS Device Logs` whose newest file is 30 days old; and
+each `.xcarchive` 180 days old by the creation date in its `Info.plist`, falling back to the
+date folder's name. Findings become ordinary Trash candidates through the scanner's `add` with
+Xcode as owner, so exclusions, the snapshot digest, the running-owner check and the change
+re-check apply unchanged. Archives are not regenerable, so the reason names the app, version,
+build and bundle identifier and the consequence says what symbolication is lost.
+
 ## Optional Claude review (0.4)
 
 `AIReviewPacket` in Core groups candidates using a fixed label catalogue. The encoded payload

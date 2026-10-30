@@ -22,6 +22,7 @@ enum Palette {
         case .projects: return rose
         case .simulators: return Color(red: 0.45, green: 0.86, blue: 0.90)
         case .android: return Color(red: 0.64, green: 0.86, blue: 0.47)
+        case .xcode: return Color(red: 0.98, green: 0.62, blue: 0.42)
         }
     }
 }
