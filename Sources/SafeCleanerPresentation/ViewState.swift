@@ -25,7 +25,7 @@ public enum WorkspaceAction {
     case setProjectProtection(String, Bool), dismissResult, quitApp(String), selectRemaining, stopCleanup
     case addProjectFolder, removeProjectFolder(String), removeExclusion(String), revealHistory(UUID)
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
-    case resetHistory, openFullDiskAccessSettings
+    case resetHistory, openFullDiskAccessSettings, selectStaleBuildOutput
     case claudeKeyChanged(String), saveClaudeKey, removeClaudeKey, claudeModelChanged(ClaudeModel)
     case analyzeWithClaude, cancelClaude, reviewAIGroup(String), clearAIGroupFilter, verifyClaudeKey
 }
@@ -89,6 +89,11 @@ public struct ProjectRowState: Identifiable {
     public let path: String
     public let detail: String
     public let isProtected: Bool
+    /// "Stale", "Active" or "Unknown", from local dates only.
+    public let badge: String
+    /// "Edited 90 days ago · Committed 95 days ago · Built 90 days ago", or what is known.
+    public let activity: String
+    public let isStale: Bool
 }
 
 public struct LocationRowState: Identifiable {
@@ -147,6 +152,9 @@ public struct WorkspaceViewState {
     /// Saving an API key does not interact with a scan or cleanup, so it is not locked by them.
     public internal(set) var canEditClaudeKey = false
     public internal(set) var projectsEmptyMessage: String?
+    /// "3 stale projects hold 18 GB of build output", or nil when nothing is stale and unprotected.
+    public internal(set) var staleSummary: String?
+    public internal(set) var canSelectStaleBuildOutput = false
     /// Shown as a sheet, not a banner: a cleanup that left anything behind must not be missable.
     public internal(set) var cleanupResult: CleanupResultState?
     public internal(set) var cleanupProgress: CleanupProgressState?
@@ -212,6 +220,7 @@ struct WorkspaceSession {
     var operation: Operation = .loading
     var candidates: [Candidate] = []
     var projects: [URL] = []
+    var activity: [ProjectActivity] = []
     /// Projects unprotected since the last scan: listed, but their build folders are not known yet.
     var rescanNeeded: [URL] = []
     /// Separate from `operation` so a key can be saved during a scan without replacing it.

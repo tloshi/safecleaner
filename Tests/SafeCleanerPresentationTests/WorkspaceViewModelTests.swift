@@ -988,6 +988,62 @@ import SafeCleanerCore
         XCTAssertTrue(vm.state.history.contains { $0.result.contains("Removed by xcrun simctl") })
     }
 
+
+    // MARK: Stale projects (0.5.8)
+
+    private func output(_ project: String, _ name: String, bytes: Int64) -> Candidate {
+        Candidate(url: URL(fileURLWithPath: "/fixture/code/\(project)/\(name)"), title: "\(project) / \(name)", category: .projects,
+            reason: "Build output.", consequence: "Rebuilds.", stamp: .init(digest: "b", logicalBytes: bytes, allocatedBytes: bytes, fileCount: 3),
+            allowedRoot: URL(fileURLWithPath: "/fixture/code"), canTrash: true, ownerBundleID: nil)
+    }
+
+    func testStaleProjectsAreBadgedSummarizedAndSelectableInOneStep() async {
+        let now = Date()
+        func days(_ n: Int) -> Date { now.addingTimeInterval(-Double(n) * 86_400) }
+        let old = URL(fileURLWithPath: "/fixture/code/old"), new = URL(fileURLWithPath: "/fixture/code/new"), locked = URL(fileURLWithPath: "/fixture/code/locked")
+        let items = [output("old", "build", bytes: 3_000_000_000), output("old", "node_modules", bytes: 1_000_000_000),
+                     output("new", "build", bytes: 2_000_000_000), output("locked", "build", bytes: 5_000_000_000), fixture("cache")]
+        let activity = [
+            ProjectActivity(project: old, lastSourceChange: days(90), lastCommit: days(95), lastBuildDays: 90, outputBytes: 4_000_000_000, outputItems: 2),
+            ProjectActivity(project: new, lastSourceChange: days(2), lastCommit: days(5), lastBuildDays: 1, outputBytes: 2_000_000_000, outputItems: 1),
+            ProjectActivity(project: locked, lastSourceChange: days(100), lastCommit: days(100), lastBuildDays: 100, outputBytes: 5_000_000_000, outputItems: 1)
+        ]
+        let repository = FakeRepository()
+        repository.settings.projectRoots = [URL(fileURLWithPath: "/fixture/code")]
+        repository.settings.protectedProjects = [locked]
+        repository.report = ScanReport(candidates: items, projects: [old, new, locked], activity: activity)
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "t")
+        await vm.start(); await vm.send(.scan)?.value
+
+        XCTAssertEqual(vm.state.projects.map(\.title), ["old", "locked", "new"], "stale and unprotected first by size, then the rest by name")
+        let row = vm.state.projects[0]
+        XCTAssertEqual(row.badge, "Stale"); XCTAssertTrue(row.isStale)
+        XCTAssertTrue(row.activity.contains("Edited 90 days ago") && row.activity.contains("Built 90 days ago"), row.activity)
+        XCTAssertEqual(vm.state.projects[2].badge, "Active")
+        XCTAssertTrue(vm.state.projects[2].activity.contains("Uncommitted"), "edited after the last commit: \(vm.state.projects[2].activity)")
+        XCTAssertEqual(vm.state.staleSummary, "1 stale project holds 4 GB of build output", "the protected project is stale but not counted")
+        XCTAssertTrue(vm.state.canSelectStaleBuildOutput)
+
+        vm.send(.selectStaleBuildOutput)
+        XCTAssertEqual(Set(vm.state.candidates.filter(\.isSelected).map(\.id)), ["/fixture/code/old/build", "/fixture/code/old/node_modules"])
+        XCTAssertEqual(vm.state.destination, .review)
+        XCTAssertTrue(vm.state.aiPayload.contains("\"projects\""))
+        XCTAssertFalse(vm.state.aiPayload.contains("old") || vm.state.aiPayload.contains("/fixture"), vm.state.aiPayload)
+    }
+
+    func testWithoutStaleProjectsTheSummaryAndActionAreAbsent() async {
+        let new = URL(fileURLWithPath: "/fixture/code/new")
+        let repository = FakeRepository()
+        repository.report = ScanReport(candidates: [output("new", "build", bytes: 1_000)], projects: [new],
+            activity: [ProjectActivity(project: new, lastSourceChange: Date(), lastCommit: nil, lastBuildDays: 0, outputBytes: 1_000, outputItems: 1)])
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "t")
+        await vm.start(); await vm.send(.scan)?.value
+        XCTAssertNil(vm.state.staleSummary)
+        XCTAssertFalse(vm.state.canSelectStaleBuildOutput)
+        XCTAssertNil(vm.send(.selectStaleBuildOutput))
+        XCTAssertTrue(vm.state.candidates.allSatisfy { !$0.isSelected })
+    }
+
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {

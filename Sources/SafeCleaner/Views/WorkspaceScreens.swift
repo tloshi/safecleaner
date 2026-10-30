@@ -65,6 +65,15 @@ private struct ProjectProtectionCard: View {
                 if let empty = state.projectsEmptyMessage {
                     Text(empty).font(.system(size: 12)).foregroundStyle(Palette.muted).padding(.vertical, 6)
                 }
+                if let stale = state.staleSummary {
+                    HStack(spacing: 12) {
+                        Label(stale, systemImage: "clock.badge.exclamationmark").font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.amber)
+                        Spacer()
+                        Button("Select stale build output") { send(.selectStaleBuildOutput) }
+                            .disabled(!state.canSelectStaleBuildOutput)
+                            .help("Selects the build folders of projects with no edit, commit or build in 60 days. Nothing moves until you review and confirm.")
+                    }
+                }
                 if !state.canEditSettings, let status = state.busyStatus {
                     Label(status, systemImage: "hourglass").font(.system(size: 11)).foregroundStyle(.orange)
                 }
@@ -73,8 +82,15 @@ private struct ProjectProtectionCard: View {
                         Image(systemName: project.isProtected ? "lock.fill" : "folder")
                             .foregroundStyle(project.isProtected ? .orange : Palette.mint).frame(width: 18)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(project.title).font(.system(size: 13, weight: .medium))
+                            HStack(spacing: 8) {
+                                Text(project.title).font(.system(size: 13, weight: .medium))
+                                Text(project.badge).font(.system(size: 9, weight: .semibold)).tracking(1)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background((project.isStale ? Palette.amber : Palette.muted).opacity(0.18), in: Capsule())
+                                    .foregroundStyle(project.isStale ? Palette.amber : Palette.muted)
+                            }
                             Text(project.detail).font(.system(size: 11)).foregroundStyle(project.isProtected ? .orange : Palette.muted)
+                            Text(project.activity).font(.system(size: 11)).foregroundStyle(Palette.muted)
                         }
                         Spacer()
                         Toggle("Don’t touch", isOn: Binding(get: { project.isProtected },

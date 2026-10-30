@@ -231,6 +231,7 @@ public struct DiskScanner: Sendable {
         }
         report.candidates.sort { $0.bytes > $1.bytes }
         report.projects.sort { $0.path < $1.path }
+        report.activity = ProjectActivityScan.activities(projects: report.projects, candidates: report.candidates, home: c.home, fm: fm)
         report.finishedAt = Date()
         return report
     }

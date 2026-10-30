@@ -50,6 +50,29 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.8 — stale projects with activity ranking and anonymized AI rows, 30 October 2026
+
+- Per-project activity from local facts only (git reflog tail, source file dates with output,
+  dependencies and `.git` skipped, output dates, DerivedData joined by `WorkspacePath`); a
+  Stale badge after 60 idle days; "Select stale build output" selecting only stale,
+  unprotected projects' output and opening Review; anonymized project rows in the Claude
+  packet with the name added back locally. Not measured on the author's Mac in this pass:
+  the next scan shows the badges.
+- **233 XCTest tests passed:** 168 core, 58 presentation, 7 service. New tests cover reflog
+  parsing (a worktree pointer file ignored, a `.git` without logs), source dates ignoring
+  build output and dependencies, output linking including DerivedData, the stale rule at the
+  60-day boundary with each signal alone and with none, packet rows (order, day counts,
+  committed flag, no name or path in the JSON, name mapping back), badges, the stale-first
+  sort, the summary excluding protected projects, the one-step selection and its absence when
+  nothing is stale.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `ProjectActivity.swift`. Version 0.5.8 (15).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. `git status` is not consulted; uncommitted work is
+  inferred from file dates newer than the last commit.
+
 ## 0.5.7 — Docker images, containers and build cache through the docker command, 30 October 2026
 
 - Tool-managed candidates in a new "Docker" category: images no container references (a

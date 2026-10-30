@@ -163,6 +163,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
+- Stale projects: each project's last edit, commit and build read locally, a Stale badge after 60 idle days, a one-step selection of stale projects' build output, and anonymized project rows for the Claude review (0.5.8).
 - Docker images no container uses, stopped containers and build cache idle for 30 days, each removed by the docker command by ID, never volumes, never a bare prune (0.5.7).
 - IDE caches by version: older Android Studio and JetBrains caches offered one by one, the newest kept; VS Code and Cursor cache folders, never settings or workspace state (0.5.6).
 - Before any move: items a running process holds open are left in place and the process named; items you cannot write are listed as not movable; nothing inside credential, mail or backup stores is ever offered; a move counts only once the source is gone (0.5.3).
@@ -239,6 +240,18 @@ stopped container still references is kept, exactly as docker would refuse it. E
 the removal is permanent and that `Docker.raw`, Docker's disk file, shrinks only after Docker
 Desktop compacts it or restarts. With the daemon stopped or Docker not installed, nothing is
 listed and nothing is warned about.
+
+## Stale projects (0.5.8)
+
+The Projects screen now says how alive each project is, from local facts only: the last
+commit from the git reflog (no git process), the last source edit from file dates with build
+output, dependencies and `.git` left out, and the last build from the output's own date. A
+project with no edit, commit or build in 60 days is badged Stale; "Select stale build output"
+on the Overview and Projects screens selects the build folders and DerivedData of stale,
+unprotected projects in one step and opens Review, where nothing moves until you confirm.
+The Claude review receives the same facts anonymized as "project 1", "project 2" and so on
+(days since edit, days since build, output size, committed or not) and its answer is shown
+with the real name added locally; no name or path leaves your Mac.
 
 ## Safety pack (0.5.3)
 

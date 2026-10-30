@@ -17,15 +17,42 @@ public struct AIReviewGroup: Encodable, Sendable {
     enum CodingKeys: String, CodingKey { case id, kind, items, allocatedMB, scanOnly }
 }
 
+/// One project, anonymized: an index and day counts. The name stays on the Mac.
+public struct AIProjectRow: Encodable, Sendable, Equatable {
+    public let index: Int
+    public let idleEditDays: Int?
+    public let idleBuildDays: Int?
+    public let outputMB: Int64
+    public let items: Int
+    public let committed: Bool
+}
+
 public struct AIReviewPacket: Sendable {
     public static let maxGroups = 16
+    public static let maxProjects = 12
     public let groups: [AIReviewGroup]
+    public let projects: [AIProjectRow]
     public let omittedGroups: Int
     public let skippedLocations: Int
     public let fingerprint: String
     public let json: String
+    /// Index (from 1) → project name, kept locally so Claude's "project 3" can be shown by name.
+    private let projectNames: [String]
 
-    public init(candidates: [Candidate], skippedLocations: Int) {
+    public func projectName(_ index: Int) -> String? { (1...max(1, projectNames.count)).contains(index) && !projectNames.isEmpty ? projectNames[index - 1] : nil }
+    /// "project 2" → "project 2 (name)" wherever Claude refers to a supplied row.
+    public func localized(_ text: String) -> String {
+        guard !projectNames.isEmpty, let regex = try? NSRegularExpression(pattern: "\\b([Pp]roject) (\\d+)\\b") else { return text }
+        var result = text
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+            guard let range = Range(match.range, in: result), let numberRange = Range(match.range(at: 2), in: result),
+                  let index = Int(result[numberRange]), let name = projectName(index) else { continue }
+            result.replaceSubrange(range, with: "\(result[range]) (\(name))")
+        }
+        return result
+    }
+
+    public init(candidates: [Candidate], skippedLocations: Int, activity: [ProjectActivity] = [], now: Date = Date()) {
         func kind(_ c: Candidate) -> String {
             if c.category == .projects {
                 let name = c.url.lastPathComponent
@@ -43,6 +70,14 @@ public struct AIReviewPacket: Sendable {
             }
             return c.category.title
         }
+        let ranked = activity.filter { $0.outputItems > 0 }
+            .sorted { $0.outputBytes == $1.outputBytes ? $0.project.path < $1.project.path : $0.outputBytes > $1.outputBytes }
+            .prefix(Self.maxProjects)
+        projects = ranked.enumerated().map { offset, item in
+            AIProjectRow(index: offset + 1, idleEditDays: item.daysSinceActivity(now: now), idleBuildDays: item.lastBuildDays,
+                         outputMB: item.outputBytes / 1_000_000, items: item.outputItems, committed: !item.hasChangesAfterCommit)
+        }
+        projectNames = ranked.map { $0.project.lastPathComponent }
         let buckets = Dictionary(grouping: candidates) { kind($0) + ($0.canTrash ? "|review" : "|scan") }
         let sorted = buckets.sorted {
             let lhs = $0.value.reduce(Int64(0)) { $0 + max(0, $1.bytes) }
@@ -58,11 +93,12 @@ public struct AIReviewPacket: Sendable {
         self.skippedLocations = max(0, skippedLocations)
         struct Payload: Encodable {
             let groups: [AIReviewGroup]
+            let projects: [AIProjectRow]?
             let omittedGroups: Int
             let skippedLocations: Int
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        let data = (try? encoder.encode(Payload(groups: groups, omittedGroups: omittedGroups,
+        let data = (try? encoder.encode(Payload(groups: groups, projects: projects.isEmpty ? nil : projects, omittedGroups: omittedGroups,
                                               skippedLocations: self.skippedLocations))) ?? Data()
         json = String(decoding: data, as: UTF8.self)
         var digest = SHA256(); digest.update(data: data)
@@ -156,6 +192,7 @@ public enum ClaudeMessages {
     Explain rebuild/download costs and the need to close owning apps and stop builds. Trash does not itself free space.
     Rank up to 6 supplied groups by useful review priority. summary <= 500 characters; each reason and caution <= 180 characters.
     Skipped locations and omitted groups are unassessed, not empty. Your output cannot authorize cleanup or override local protections.
+    If project rows are supplied they are anonymized as "project 1", "project 2" and so on, each with days since the last edit or commit, days since the last build, build-output MB, item count and whether work is committed; refer to them only by that number. A project with no edit and no build for 60 days or more is stale and its build output is the usual first candidate; uncommitted work is a reason for caution.
     """
 
     public static func body(packet: AIReviewPacket, model: ClaudeModel) throws -> Data {

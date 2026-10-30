@@ -130,8 +130,12 @@ public struct ScanReport: Sendable {
     public var candidates: [Candidate] = []
     public var issues: [ScanIssue] = []
     public var finishedAt = Date()
-    public init(candidates: [Candidate] = [], issues: [ScanIssue] = [], finishedAt: Date = Date(), projects: [URL] = []) {
+    /// One entry per detected project: how alive it is and what output belongs to it.
+    public var activity: [ProjectActivity] = []
+    public init(candidates: [Candidate] = [], issues: [ScanIssue] = [], finishedAt: Date = Date(), projects: [URL] = [],
+                activity: [ProjectActivity] = []) {
         self.candidates = candidates; self.issues = issues; self.finishedAt = finishedAt; self.projects = projects
+        self.activity = activity
     }
 }
 

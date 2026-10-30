@@ -75,6 +75,11 @@ enum WorkspacePresenter {
         }
         state.cleanupProgress = session.operation == .cleaning ? progress(session) : nil
         state.projects = projectRows(session, homePath: homePath)
+        let stale = staleProjects(session)
+        let staleBytes = stale.reduce(Int64(0)) { $0 + $1.outputBytes }
+        state.staleSummary = stale.isEmpty ? nil
+            : "\(stale.count) stale \(stale.count == 1 ? "project holds" : "projects hold") \(byteLabel(staleBytes)) of build output"
+        state.canSelectStaleBuildOutput = !stale.isEmpty && !busy && !preview
         state.projectsEmptyMessage = !state.projects.isEmpty ? nil
             : session.settings.projectRoots.isEmpty ? "Add a project folder above, then scan."
             : session.operation == .scanning ? "Scanning your project folders…"
@@ -125,7 +130,7 @@ enum WorkspacePresenter {
             state.aiScope = "\(packet.groups.count) groups · \(packet.omittedGroups) groups omitted · \(packet.skippedLocations) scan issues · At most \(ClaudeMessages.maxOutputTokens) output tokens"
         }
         if let analysis = session.aiAnalysis, let packet = session.aiPacket {
-            state.aiSummary = analysis.summary
+            state.aiSummary = packet.localized(analysis.summary)
             state.aiUsage = analysis.cached
                 ? "Reused in memory · No new API request or tokens"
                 : "\(analysis.inputTokens) input + \(analysis.outputTokens) output tokens · \(session.claudeModel.title)"
@@ -133,7 +138,7 @@ enum WorkspacePresenter {
                 guard let group = packet.groups.first(where: { $0.id == recommendation.groupID }) else { return nil }
                 return AIAdviceRowState(id: group.id, title: group.kind,
                     detail: "\(group.items) items · About \(byteLabel(group.allocatedMB * 1_000_000))\(group.scanOnly ? " · Scan only" : "")",
-                    disposition: recommendation.disposition.title, reason: recommendation.reason, caution: recommendation.caution)
+                    disposition: recommendation.disposition.title, reason: packet.localized(recommendation.reason), caution: packet.localized(recommendation.caution))
             }
         }
         return state
@@ -252,7 +257,12 @@ enum WorkspacePresenter {
             guard parents.filter({ $0 == parent }).count > 1 else { return parent }
             return url.path.hasPrefix(homePath + "/") ? "~" + url.path.dropFirst(homePath.count) : url.path
         }
-        return urls.map { url in
+        let now = Date()
+        func days(_ n: Int?, _ verb: String) -> String? {
+            guard let n else { return nil }
+            return n == 0 ? "\(verb) today" : n == 1 ? "\(verb) yesterday" : "\(verb) \(n) days ago"
+        }
+        let rows = urls.map { url -> (row: ProjectRowState, bytes: Int64, staleFirst: Bool) in
             let isProtected = protected.contains { FileSafety.isSame($0, url) }
             let builds = session.candidates.filter { $0.category == .projects && FileSafety.isInside($0.url, root: url) }
             let bytes = builds.reduce(Int64(0)) { $0 + $1.bytes }
@@ -260,10 +270,30 @@ enum WorkspacePresenter {
                 : session.rescanNeeded.contains(where: { FileSafety.isSame($0, url) }) ? "Not scanned yet · Scan again to include its build folders"
                 : builds.isEmpty ? "No build folders found"
                 : "\(builds.count) build \(builds.count == 1 ? "folder" : "folders") · \(byteLabel(bytes))"
-            return ProjectRowState(id: url.path, title: title(url), path: url.path, detail: detail, isProtected: isProtected)
-        }.sorted {
-            let order = $0.title.localizedStandardCompare($1.title)
-            return order == .orderedSame ? $0.path < $1.path : order == .orderedAscending
+            let activity = session.activity.first { FileSafety.isSame($0.project, url) }
+            let status = activity?.status(now: now) ?? .unknown
+            let parts = [days(activity?.daysSinceSourceChange(now: now), "Edited"),
+                         activity?.hasChangesAfterCommit == true ? "Uncommitted changes" : days(activity?.daysSinceCommit(now: now), "Committed"),
+                         days(activity?.lastBuildDays, "Built")].compactMap { $0 }
+            let row = ProjectRowState(id: url.path, title: title(url), path: url.path, detail: detail, isProtected: isProtected,
+                badge: status == .stale ? "Stale" : status == .active ? "Active" : "Unknown",
+                activity: parts.isEmpty ? "No activity signal yet. Scan to read it." : parts.joined(separator: " · "),
+                isStale: status == .stale)
+            return (row, activity?.outputBytes ?? bytes, status == .stale && !isProtected)
+        }
+        return rows.sorted {
+            if $0.staleFirst != $1.staleFirst { return $0.staleFirst }
+            if $0.staleFirst, $0.bytes != $1.bytes { return $0.bytes > $1.bytes }
+            let order = $0.row.title.localizedStandardCompare($1.row.title)
+            return order == .orderedSame ? $0.row.path < $1.row.path : order == .orderedAscending
+        }.map(\.row)
+    }
+
+    /// Stale, unprotected projects that have build output: what "select stale build output" acts on.
+    static func staleProjects(_ session: WorkspaceSession, now: Date = Date()) -> [ProjectActivity] {
+        session.activity.filter { activity in
+            activity.isStale(now: now) && activity.outputItems > 0
+                && !session.settings.protectedProjects.contains { FileSafety.isSame($0, activity.project) }
         }
     }
 }

@@ -144,4 +144,33 @@ final class ClaudeReviewTests: XCTestCase {
         XCTAssertFalse(packet.json.contains("ModuleCache"))
     }
 
+
+    /// Project rows let Claude rank stale projects, anonymized to an index and day counts.
+    func testProjectRowsAreAnonymizedAndOrderedByOutputSize() {
+        let now = Date()
+        func days(_ n: Int) -> Date { now.addingTimeInterval(-Double(n) * 86_400) }
+        let small = ProjectActivity(project: URL(fileURLWithPath: "/Users/someone/code/secret-client"), lastSourceChange: days(90), lastCommit: days(85),
+                                    lastBuildDays: 88, outputBytes: 2_000_000_000, outputItems: 2)
+        let large = ProjectActivity(project: URL(fileURLWithPath: "/Users/someone/code/other"), lastSourceChange: days(2), lastCommit: days(5),
+                                    lastBuildDays: 1, outputBytes: 9_000_000_000, outputItems: 3)
+        let packet = AIReviewPacket(candidates: [candidate()], skippedLocations: 0, activity: [small, large], now: now)
+        XCTAssertEqual(packet.projects.map(\.index), [1, 2])
+        XCTAssertEqual(packet.projects[0].outputMB, 9_000, "largest output first")
+        XCTAssertEqual(packet.projects[1].idleEditDays, 85, "days since the newer of edit and commit")
+        XCTAssertEqual(packet.projects[1].idleBuildDays, 88)
+        XCTAssertEqual(packet.projects[1].committed, true)
+        XCTAssertEqual(packet.projects[0].committed, false, "edited after the last commit")
+        XCTAssertTrue(packet.json.contains("\"projects\""))
+        XCTAssertTrue(packet.json.contains("\"idleEditDays\":85"))
+        for forbidden in ["secret-client", "/Users", "someone"] {
+            XCTAssertFalse(packet.json.contains(forbidden), "\(forbidden) must not leave the Mac")
+        }
+        XCTAssertEqual(packet.projectName(1), "other")
+        XCTAssertEqual(packet.projectName(2), "secret-client")
+        XCTAssertNil(packet.projectName(3))
+        XCTAssertEqual(packet.localized("Project 2 has been idle; project 1 is active."), "Project 2 (secret-client) has been idle; project 1 (other) is active.")
+        let bare = AIReviewPacket(candidates: [candidate()], skippedLocations: 0)
+        XCTAssertFalse(bare.json.contains("projects"), "no rows, no key")
+    }
+
 }

@@ -164,6 +164,22 @@ a tool-managed item to the simulator or Docker remover. `ToolRemoval.tool` and
 `CleanupRecord.tool` name the tool, and `ToolLabel` in Presentation renders "simctl",
 "docker" or "simctl and docker" on every surface that once said simctl.
 
+## Project activity (0.5.8)
+
+`ProjectActivity` in Core holds one project's signals and the stale rule (`staleDays = 60`:
+stale when the newer of edit and commit, and the last build, are each that old or absent, and
+at least one signal exists; no signal at all is unknown). `ProjectActivityScan` computes it at
+the end of `DiskScanner.scan` for every detected project: `lastCommit` reads the tail of
+`.git/logs/HEAD` and never follows a `.git` worktree pointer file; `lastSourceChange` walks the
+project with build output, dependencies, hidden entries and package contents skipped, capped;
+the output set is the project's `.projects` candidates plus DerivedData rows whose
+`WorkspacePath` lies inside it. `ScanReport.activity` carries the result; the presenter builds
+badges, the activity line, the stale-first sort and `staleSummary`; the
+`selectStaleBuildOutput` action selects that output for stale, unprotected projects and
+opens Review. `AIReviewPacket` gains `projects` rows (index, idle days, output MB, items,
+committed) capped at 12, and `localized(_:)` adds the real name after "project N" in Claude's
+text, locally.
+
 ## Safety pack (0.5.3)
 
 `OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of

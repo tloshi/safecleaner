@@ -169,6 +169,17 @@ tjerat nuk propozohen kurrë. Fixtures në `IDECachesTests.swift`. **Kufizime:**
 mbahet gjithmonë, edhe kur nuk përdoret prej muajsh (nuk ka rregull idle, sepse data e skedarit
 më të ri në një cache me qindra mijëra skedarë nuk matet me siguri).
 
+**Projektet e ndenjura (0.5.8, 30 tetor 2026) — e implementuar:** për çdo projekt të zbuluar
+lexohen lokalisht commit-i i fundit (nga `.git/logs/HEAD`, pa proces git), editimi i fundit i
+burimit (datat e skedarëve, duke lënë jashtë build-in, varësitë dhe `.git`) dhe build-i i fundit
+(data e vetë output-it, përfshirë DerivedData sipas `WorkspacePath`). Pa editim, commit apo build
+për 60 ditë = "Stale"; pa asnjë sinjal = "Unknown", kurrë stale. "Select stale build output"
+përzgjedh output-in e projekteve stale të pambrojtura dhe hap Review; asgjë nuk lëviz pa
+konfirmim. Rishikimi me Claude merr rreshta të anonimizuar ("project 1", ditë që nga editimi dhe
+build-i, MB, committed) dhe emri shtohet lokalisht në përgjigje. Fixtures në
+`ProjectActivityTests.swift`. **Kufizime:** nuk lexon `git status` (ndryshimet e pakomituara
+nxirren nga datat e skedarëve kundrejt commit-it); nuk ka ende model në pajisje.
+
 **Paketa e sigurisë (0.5.3, 30 tetor 2026) — e implementuar:** (1) kontroll i skedarëve të hapur
 përmes libproc menjëherë para çdo lëvizjeje në Trash: nëse një proces i përdoruesit mban të hapur
 një skedar, folderin e punës ose ekzekutuesin brenda artikullit, artikulli lihet në vend dhe

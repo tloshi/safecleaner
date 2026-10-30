@@ -38,6 +38,20 @@ struct OverviewView: View {
                     }
                 }
 
+                if let stale = state.staleSummary {
+                    Card {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label(stale, systemImage: "clock.badge.exclamationmark").font(.system(size: 13, weight: .medium))
+                                Text("Projects with no edit, commit or build in 60 days. Their output rebuilds on the next build; the projects themselves are untouched.")
+                                    .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            }
+                            Spacer()
+                            Button("Select stale build output") { send(.selectStaleBuildOutput) }.disabled(!state.canSelectStaleBuildOutput)
+                        }
+                    }
+                }
+
                 // The largest category on a developer's Mac is build output inside project
                 // folders, and it stays invisible until a root is added. Saying nothing here
                 // means the first scan under-reports by tens of GB for no visible reason.

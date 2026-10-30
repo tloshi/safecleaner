@@ -91,7 +91,7 @@ import SafeCleanerCore
         case .scan:
             guard state.canScan else { return nil }
             session.operation = .scanning; session.progress = "Preparing your scan…"; session.message = nil
-            session.selected.removeAll(); session.candidates = []; session.projects = []; session.issues = []; session.lastScan = nil
+            session.selected.removeAll(); session.candidates = []; session.projects = []; session.activity = []; session.issues = []; session.lastScan = nil
             invalidateAI()
             closeConfirmation()
             let id = UUID(); scanID = id
@@ -164,6 +164,18 @@ import SafeCleanerCore
             }
         case .openFullDiskAccessSettings:
             if previewReport == nil { repository.openFullDiskAccessSettings() }
+        case .selectStaleBuildOutput:
+            // Stale, unprotected projects only; still a selection to review, never a cleanup.
+            guard state.canSelectStaleBuildOutput else { return nil }
+            let stale = WorkspacePresenter.staleProjects(session)
+            let ids = Set(session.candidates.filter { candidate in
+                candidate.canTrash && stale.contains { project in
+                    project.outputIDs.contains(candidate.id) || (candidate.category == .projects && FileSafety.isInside(candidate.url, root: project.project))
+                }
+            }.map(\.id))
+            session.selected.formUnion(ids)
+            session.category = nil; session.query = ""; session.aiGroupFilter = nil; session.destination = .review
+            closeConfirmation()
         case .resetHistory:
             // Only offered while the stored history is unreadable. Discarding a readable
             // activity log is not something this action should be able to do by mistake.
@@ -368,12 +380,13 @@ import SafeCleanerCore
     }
     private func apply(_ report: ScanReport) {
         session.candidates = report.candidates; session.projects = report.projects; session.rescanNeeded = []
+        session.activity = report.activity
         session.issues = report.issues; session.lastScan = report.finishedAt
         invalidateAI()
     }
     private func invalidateAI() {
         session.aiAnalysis = nil; session.aiGroupFilter = nil
-        session.aiPacket = session.candidates.isEmpty ? nil : AIReviewPacket(candidates: session.candidates, skippedLocations: session.issues.count)
+        session.aiPacket = session.candidates.isEmpty ? nil : AIReviewPacket(candidates: session.candidates, skippedLocations: session.issues.count, activity: session.activity)
     }
     private func refreshKeyPresence() {
         do {
