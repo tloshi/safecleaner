@@ -342,10 +342,11 @@ import SafeCleanerCore
             session.outcome = outcome
             // The result screen explains what did not move; the banner only reports what did.
             let byTool = moved.filter(\.isToolRemoval).count
+            let tools = ToolLabel.short(moved.compactMap(\.toolName))
             session.message = moved.isEmpty ? nil
                 : byTool == 0 ? "\(moved.count) \(moved.count == 1 ? "item" : "items") moved to Trash. Space is not reclaimed until Trash is emptied."
-                : byTool == moved.count ? "\(byTool) simulator \(byTool == 1 ? "item" : "items") removed with simctl. That space is free now."
-                : "\(moved.count - byTool) moved to Trash and \(byTool) removed with simctl. Trash space returns when you empty it."
+                : byTool == moved.count ? "\(byTool) \(byTool == 1 ? "item" : "items") removed with \(tools). That space is free now."
+                : "\(moved.count - byTool) moved to Trash and \(byTool) removed with \(tools). Trash space returns when you empty it."
             // Move on to Activity only if the user stayed put. Someone who went elsewhere meanwhile
             // (say, Settings with a key half typed) is not pulled away; the result sheet appears
             // wherever they are.

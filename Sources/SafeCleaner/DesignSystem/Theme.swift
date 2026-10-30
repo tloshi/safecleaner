@@ -24,6 +24,7 @@ enum Palette {
         case .android: return Color(red: 0.64, green: 0.86, blue: 0.47)
         case .xcode: return Color(red: 0.98, green: 0.62, blue: 0.42)
         case .gradle: return Color(red: 0.91, green: 0.80, blue: 0.50)
+        case .docker: return Color(red: 0.36, green: 0.62, blue: 0.96)
         }
     }
 }

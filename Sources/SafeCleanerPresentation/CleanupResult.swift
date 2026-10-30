@@ -5,6 +5,19 @@ import SafeCleanerCore
 
 public enum AppQuitStatus: Sendable, Equatable { case open, quitting, closed, stillOpen }
 
+/// The tools behind a set of items, in a fixed order, as "simctl", "docker" or "simctl and docker".
+enum ToolLabel {
+    static let order = ["simctl", "docker"]
+    static func short(_ tools: some Sequence<String>) -> String {
+        let present = Set(tools)
+        return order.filter(present.contains).joined(separator: " and ")
+    }
+    static func command(_ tools: some Sequence<String>) -> String {
+        let present = Set(tools)
+        return order.filter(present.contains).map { $0 == "simctl" ? "xcrun simctl" : $0 }.joined(separator: " and ")
+    }
+}
+
 /// An open app that kept some selected items in place, with a way to quit it from here.
 public struct BlockingAppState: Identifiable, Equatable {
     public let id: String
@@ -51,6 +64,8 @@ struct CleanupOutcome {
     /// The subset removed by a tool: freed immediately, nothing in Trash.
     let removedByTool: Int
     let removedByToolBytes: Int64
+    /// Short names of the tools that removed items, for the titles.
+    let tools: [String]
     let failed: [CleanupRecord]
     let stoppedReason: String?
     let refusal: String?
@@ -74,6 +89,7 @@ struct CleanupOutcome {
         var outcome = CleanupOutcome(requested: requested.count, moved: moved.count,
             movedBytes: moved.reduce(Int64(0)) { $0 + $1.bytes },
             removedByTool: byTool.count, removedByToolBytes: byTool.reduce(Int64(0)) { $0 + $1.bytes },
+            tools: byTool.compactMap(\.toolName),
             failed: result.records.filter { $0.error != nil }, stoppedReason: result.stoppedReason,
             refusal: nil, heldByApp: held)
         outcome.appStatus = held.mapValues { _ in .open }
@@ -81,7 +97,7 @@ struct CleanupOutcome {
     }
 
     static func refused(_ message: String, requested: Int) -> CleanupOutcome {
-        CleanupOutcome(requested: requested, moved: 0, movedBytes: 0, removedByTool: 0, removedByToolBytes: 0,
+        CleanupOutcome(requested: requested, moved: 0, movedBytes: 0, removedByTool: 0, removedByToolBytes: 0, tools: [],
                        failed: [], stoppedReason: nil, refusal: message, heldByApp: [:])
     }
 
@@ -109,15 +125,16 @@ enum CleanupResultPresenter {
         let left = outcome.leftInPlace
         let trashed = outcome.moved - outcome.removedByTool
         let trashedBytes = outcome.movedBytes - outcome.removedByToolBytes
+        let tools = ToolLabel.short(outcome.tools)
         let title: String
         if outcome.moved == 0 { title = "Nothing was moved to Trash" }
         else if outcome.removedByTool == 0 { title = left == 0 ? "All \(outcome.moved) moved to Trash" : "\(outcome.moved) moved to Trash" }
-        else if trashed == 0 { title = left == 0 ? "All \(outcome.moved) removed with simctl" : "\(outcome.moved) removed with simctl" }
-        else { title = "\(trashed) moved to Trash · \(outcome.removedByTool) removed with simctl" }
+        else if trashed == 0 { title = left == 0 ? "All \(outcome.moved) removed with \(tools)" : "\(outcome.moved) removed with \(tools)" }
+        else { title = "\(trashed) moved to Trash · \(outcome.removedByTool) removed with \(tools)" }
         var subtitle: [String] = []
         if left > 0 { subtitle.append("\(items(left)) left in place") }
         if trashed > 0 { subtitle.append("\(byteLabel(trashedBytes)) in Trash · Space returns when you empty it") }
-        if outcome.removedByTool > 0 { subtitle.append("\(byteLabel(outcome.removedByToolBytes)) freed by simctl") }
+        if outcome.removedByTool > 0 { subtitle.append("\(byteLabel(outcome.removedByToolBytes)) freed by \(tools)") }
 
         return CleanupResultState(title: title, subtitle: subtitle.joined(separator: " · "),
             movedAnything: outcome.moved > 0, apps: apps, issues: issues(outcome),

@@ -147,6 +147,23 @@ so the whole-folder row disappears, and otherwise leaves that row alone. Editor 
 fixed list of folders under `Application Support/Code`, `Code - Insiders`, `VSCodium` and
 `Cursor`; everything else beside them is settings or state and is never nominated.
 
+## Docker (0.5.7)
+
+`Docker` in Core follows the simulator adapter. `DockerInventory` parses the JSON lines of
+`docker image ls` and `docker container ls --all --size` and the text blocks of `docker
+buildx du --verbose`, including docker's own size strings and relative ages. `DockerRules`
+offers images no container references (by ID, `repository:tag` or bare repository for
+`latest`), containers in `exited`, `created` or `dead` state and reclaimable cache entries,
+each at least 1 MB and 30 days idle, as tool-managed candidates with pseudo paths under
+`/docker/`. `DockerScan` runs the three read-only commands through `ToolRunning` and treats a
+stopped daemon or a missing command as a quiet skip; a failed build-cache inventory is an
+issue while images and containers are still offered. `DockerRemover` re-lists before each
+per-item command. The catalogue gained `dockerID` (12–64 lowercase hex, optional `sha256:`)
+and the six docker commands; the legacy `image prune -a` entry is gone. `ToolRemovers` routes
+a tool-managed item to the simulator or Docker remover. `ToolRemoval.tool` and
+`CleanupRecord.tool` name the tool, and `ToolLabel` in Presentation renders "simctl",
+"docker" or "simctl and docker" on every surface that once said simctl.
+
 ## Safety pack (0.5.3)
 
 `OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of

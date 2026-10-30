@@ -948,6 +948,46 @@ import SafeCleanerCore
                           "a category with one unmovable item and one cleanable item is not scan-only")
     }
 
+
+    // MARK: Docker (0.5.7)
+
+    /// A second tool means none of the surfaces may say "simctl" by assumption: each names
+    /// the tool that removes the item, and a mixed selection names both.
+    func testToolSurfacesNameTheToolThatRemovesEachItem() async {
+        let image = Candidate(url: URL(fileURLWithPath: "/docker/images/python:3.12"), title: "python:3.12 image",
+            category: .docker, reason: "No container uses it.", consequence: "Removed permanently by docker.",
+            stamp: .init(digest: "docker-image:x:1GB", logicalBytes: 1_000_000_000, allocatedBytes: 1_000_000_000, fileCount: 0),
+            allowedRoot: URL(fileURLWithPath: "/docker/images"), canTrash: true, ownerBundleID: DockerRules.owner,
+            removal: .dockerImage(id: String(repeating: "c", count: 64)))
+        let runtime = Candidate(url: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS-26-2"), title: "iOS 26.2 simulator runtime",
+            category: .simulators, reason: "Last used 45 days ago.", consequence: "Removed permanently by xcrun simctl.",
+            stamp: .init(digest: "simctl", logicalBytes: 8_000, allocatedBytes: 8_000, fileCount: 0),
+            allowedRoot: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes"), canTrash: true,
+            ownerBundleID: SimulatorRules.owner, removal: .simulatorRuntime(identifier: "7108F245-A808-4DA6-BB9B-C870AA12AF8B"))
+        let (vm, repository) = await ready([image, runtime])
+        vm.send(.toggleCandidate(image.id)); vm.send(.openConfirmation)
+        XCTAssertEqual(vm.state.confirmButtonTitle, "Remove with docker")
+        XCTAssertTrue(vm.state.selectionCaption.contains("Removed by docker"), vm.state.selectionCaption)
+        XCTAssertTrue(vm.state.confirmationToolNote?.contains("docker") == true, vm.state.confirmationToolNote ?? "nil")
+        XCTAssertFalse(vm.state.confirmationToolNote?.contains("simctl") == true, vm.state.confirmationToolNote ?? "nil")
+        XCTAssertTrue(vm.state.candidates.first { $0.id == image.id }?.metadata.contains("docker") == true)
+        vm.send(.dismissConfirmation); vm.send(.toggleCandidate(runtime.id)); vm.send(.openConfirmation)
+        XCTAssertEqual(vm.state.confirmButtonTitle, "Remove with simctl and docker")
+        XCTAssertTrue(vm.state.selectionCaption.contains("simctl and docker"), vm.state.selectionCaption)
+        vm.send(.acknowledge(true))
+        let records = [
+            CleanupRecord(originalPath: image.id, trashPath: nil, bytes: image.bytes, error: nil, method: .tool, tool: "docker"),
+            CleanupRecord(originalPath: runtime.id, trashPath: nil, bytes: runtime.bytes, error: nil, method: .tool, tool: "simctl")
+        ]
+        repository.cleanupResult = .init(records: records, history: records)
+        await vm.send(.confirmCleanup)?.value
+        XCTAssertEqual(vm.state.cleanupResult?.title, "All 2 removed with simctl and docker")
+        XCTAssertTrue(vm.state.cleanupResult?.subtitle.contains("freed by simctl and docker") == true, vm.state.cleanupResult?.subtitle ?? "")
+        XCTAssertTrue(vm.state.message?.contains("removed with simctl and docker") == true, vm.state.message ?? "")
+        XCTAssertTrue(vm.state.history.contains { $0.result.contains("Removed by docker") }, "\(vm.state.history.map(\.result))")
+        XCTAssertTrue(vm.state.history.contains { $0.result.contains("Removed by xcrun simctl") })
+    }
+
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {

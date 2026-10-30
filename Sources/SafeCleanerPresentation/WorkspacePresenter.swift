@@ -31,10 +31,11 @@ enum WorkspacePresenter {
         state.scanDate = session.lastScan.map { "Scanned \($0.formatted(date: .omitted, time: .shortened))" } ?? "Awaiting first scan"
         state.selectedSize = byteLabel(selectedBytes); state.selectedValue = Double(selectedBytes)
         let toolItems = selected.filter { $0.removal != nil }
+        let tools = ToolLabel.short(toolItems.compactMap { $0.removal?.tool })
         let count = "\(selected.count) \(selected.count == 1 ? "item" : "items")"
         state.selectionCaption = toolItems.isEmpty ? "\(count) · Moves to Trash, not permanent deletion"
-            : toolItems.count == selected.count ? "\(count) · Removed by xcrun simctl · Permanent, not Trash"
-            : "\(count) · \(toolItems.count) removed by simctl (permanent), the rest move to Trash"
+            : toolItems.count == selected.count ? "\(count) · Removed by \(tools) · Permanent, not Trash"
+            : "\(count) · \(toolItems.count) removed by \(tools) (permanent), the rest move to Trash"
         state.categories = CleanCategory.allCases.map { category in
             let items = session.candidates.filter { $0.category == category }
             let bytes = items.reduce(Int64(0)) { $0 + $1.bytes }
@@ -53,7 +54,7 @@ enum WorkspacePresenter {
                 category: item.category, badge: item.removal != nil ? "Tool removal" : item.blocker != nil ? "Not movable" : item.canTrash ? "Review first" : "Scan only",
                 reason: item.blocker.map { "\($0) \(item.reason)" } ?? item.reason, consequence: item.consequence,
                 metadata: item.removal != nil
-                    ? "Tool-managed · \(byteLabel(item.bytes)) reported by xcrun simctl · Removed by simctl, not Trash"
+                    ? "Tool-managed · \(byteLabel(item.bytes)) reported by \(item.removal?.command ?? "its tool") · Removed by \(item.removal?.tool ?? "its tool"), not Trash"
                     : "\(item.stamp.fileCount) files · \(byteLabel(item.stamp.logicalBytes)) logical · \(byteLabel(item.bytes)) allocated estimate",
                 isSelected: session.selected.contains(item.id), canSelect: item.canTrash && !busy && !preview,
                 canReveal: !preview, canExclude: !busy && !preview)
@@ -89,7 +90,7 @@ enum WorkspacePresenter {
             HistoryRowState(id: record.id, title: URL(fileURLWithPath: record.originalPath).lastPathComponent,
                 path: record.originalPath, date: record.date.formatted(date: .abbreviated, time: .shortened),
                 result: record.error ?? (record.isToolRemoval
-                    ? "Removed by xcrun simctl · \(byteLabel(record.bytes)) · Space freed, nothing in Trash"
+                    ? "Removed by \(ToolLabel.command([record.toolName ?? "simctl"])) · \(byteLabel(record.bytes)) · Space freed, nothing in Trash"
                     : "Moved to Trash · \(byteLabel(record.bytes)) · Space not yet reclaimed"),
                 failed: record.error != nil, canReveal: record.trashPath != nil && !preview)
         }
@@ -186,14 +187,20 @@ enum WorkspacePresenter {
                     "These exact items will move to Trash. You can restore them in Finder until the Trash is emptied.",
                     "Move to Trash", nil)
         }
-        let note = "\(toolCount) (\(toolBytes)) are simulator runtimes or devices. xcrun simctl removes them permanently: they never reach Trash and cannot be restored. Xcode can download a runtime or create a device again."
+        let present = Set(toolItems.compactMap { $0.removal?.tool })
+        let tools = ToolLabel.short(present), commands = ToolLabel.command(present)
+        let what = [present.contains("simctl") ? "simulator runtimes or devices" : nil,
+                    present.contains("docker") ? "Docker images, containers or build cache" : nil].compactMap { $0 }.joined(separator: " and ")
+        let recovery = [present.contains("simctl") ? "Xcode can download a runtime or create a device again." : nil,
+                        present.contains("docker") ? "Docker pulls an image or rebuilds a cache step again when needed; volumes are never touched." : nil].compactMap { $0 }.joined(separator: " ")
+        let note = "\(toolCount) (\(toolBytes)) are \(what). \(commands) \(present.count == 1 ? "removes" : "remove") them permanently: they never reach Trash and cannot be restored. \(recovery)"
         if toolItems.count == selected.count {
-            return ("Remove \(size) with simctl?",
-                    "These exact simulator items will be removed by Xcode's simctl. Each is re-checked first and left in place if it was used since the scan.",
-                    "Remove with simctl", note)
+            return ("Remove \(size) with \(tools)?",
+                    "These exact items will be removed by \(commands). Each is re-checked first and left in place if it changed since the scan.",
+                    "Remove with \(tools)", note)
         }
-        return ("Move \(size) to Trash and remove simulators?",
-                "Files move to Trash, where you can restore them in Finder. Simulator items are removed by Xcode's simctl.",
+        return ("Move \(size) to Trash and remove the rest with \(tools)?",
+                "Files move to Trash, where you can restore them in Finder. Tool-managed items are removed by \(commands).",
                 "Move to Trash and remove", note)
     }
 

@@ -47,7 +47,7 @@ public struct ToolCommand: Sendable, Equatable {
         public var errorDescription: String? {
             switch self {
             case .notAllowed(let p): return "\(p) is not an allowed tool."
-            case .invalidArgument(let a): return "\(a) is not a valid simulator identifier, so no command was run."
+            case .invalidArgument(let a): return "\(a) is not a valid identifier for its tool, so no command was run."
             case .missing(let p): return "\(p) is not installed."
             case .notExecutable(let p): return "\(p) is not executable."
             case .writableByOthers(let p):
@@ -132,8 +132,32 @@ public struct ToolCommand: Sendable, Equatable {
         static func unavailableDevicesApply() -> ToolCommand {
             .init(xcrun, ["simctl", "delete", "unavailable"])
         }
-        static func dockerPreview(_ path: String) -> ToolCommand { .init(path, ["system", "df"]) }
-        static func dockerApply(_ path: String) -> ToolCommand { .init(path, ["image", "prune", "-a", "-f"]) }
+        // Docker: read-only inventories and per-item removals. No prune without an `id=`
+        // filter, no `-f`, no `-v`, nothing that names a volume.
+        public static func dockerImageList(_ path: String) -> ToolCommand { .init(path, ["image", "ls", "--format", "json", "--no-trunc"]) }
+        public static func dockerContainerList(_ path: String) -> ToolCommand {
+            .init(path, ["container", "ls", "--all", "--size", "--format", "json", "--no-trunc"])
+        }
+        public static func dockerBuildCacheList(_ path: String) -> ToolCommand { .init(path, ["buildx", "du", "--verbose"]) }
+        public static func dockerImageRemove(_ path: String, id: String) throws -> ToolCommand { .init(path, ["image", "rm", try dockerID(id)]) }
+        public static func dockerContainerRemove(_ path: String, id: String) throws -> ToolCommand { .init(path, ["container", "rm", try dockerID(id)]) }
+        public static func dockerBuildCacheRemove(_ path: String, id: String) throws -> ToolCommand {
+            .init(path, ["buildx", "prune", "--force", "--filter", "id=" + (try dockerID(id))])
+        }
+        /// A content hash as docker reports it: 12 to 64 lowercase hex digits, optionally
+        /// prefixed "sha256:". A tag, a flag or anything else is refused before it becomes an argument.
+        static func dockerID(_ value: String) throws -> String {
+            let hex = value.hasPrefix("sha256:") ? String(value.dropFirst(7)) : value
+            guard (12...64).contains(hex.count), hex.allSatisfy({ $0.isASCII && $0.isHexDigit && !$0.isUppercase }) else {
+                throw ToolError.invalidArgument(String(value.prefix(60)))
+            }
+            return value
+        }
+        static let sampleDockerID = String(repeating: "0", count: 64)
+        /// The first installed docker command, or nil when Docker is not installed.
+        public static func dockerExecutable(fm: FileManager = .default) -> String? {
+            dockerPaths.first { fm.isExecutableFile(atPath: $0) }
+        }
         static func brewPreview(_ path: String) -> ToolCommand { .init(path, ["cleanup", "--prune=30", "--dry-run"]) }
         static func brewApply(_ path: String) -> ToolCommand { .init(path, ["cleanup", "--prune=30"]) }
 
@@ -144,7 +168,11 @@ public struct ToolCommand: Sendable, Equatable {
                        simulatorRuntimeList(), simulatorDeviceList()]
             if let runtime = try? simulatorRuntimeDelete(identifier: sampleUUID),
                let device = try? simulatorDeviceDelete(udid: sampleUUID) { all += [runtime, device] }
-            all += dockerPaths.flatMap { [dockerPreview($0), dockerApply($0)] }
+            for path in dockerPaths {
+                all += [dockerImageList(path), dockerContainerList(path), dockerBuildCacheList(path)]
+                if let image = try? dockerImageRemove(path, id: sampleDockerID), let container = try? dockerContainerRemove(path, id: sampleDockerID),
+                   let cache = try? dockerBuildCacheRemove(path, id: sampleDockerID) { all += [image, container, cache] }
+            }
             all += brewPaths.flatMap { [brewPreview($0), brewApply($0)] }
             return all
         }
@@ -177,13 +205,6 @@ public struct ToolAction: Sendable, Identifiable {
                   preview: ToolCommand.Catalogue.unavailableDevicesPreview(),
                   apply: ToolCommand.Catalogue.unavailableDevicesApply())
         ]
-        if let docker = ToolCommand.Catalogue.dockerPaths.first(where: { fm.isExecutableFile(atPath: $0) }) {
-            actions.append(.init(id: "docker-images", title: "Unused Docker images",
-                detail: "Images no container is using. Docker's disk file never shrinks on its own.",
-                consequence: "The next build or run pulls them again and needs internet.",
-                preview: ToolCommand.Catalogue.dockerPreview(docker),
-                apply: ToolCommand.Catalogue.dockerApply(docker)))
-        }
         if let brew = ToolCommand.Catalogue.brewPaths.first(where: { fm.isExecutableFile(atPath: $0) }) {
             actions.append(.init(id: "brew-cache", title: "Homebrew downloads",
                 detail: "Cached downloads and superseded versions older than 30 days.",

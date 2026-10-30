@@ -106,7 +106,7 @@ Gjendjet e UI: pa skanim; duke skanuar; skanim i anuluar; pa rezultate; rezultat
 5. Pub/Flutter: dallo cache të paketave nga global packages; ruaj SDK-të dhe burimet.
 6. Xcode: DerivedData sipas projektit; Archives, DeviceSupport dhe simulator runtimes si kategori të veçanta që kërkojnë shqyrtim. **[simulatorët: e implementuar në 0.5; DeviceSupport, dokumentacioni, device logs dhe arkivat: e implementuar në 0.5.2, shih më poshtë]**
 7. Projektet: konfirmo framework-un, build directory custom, procese aktive, Git-tracked files dhe lokale të modifikuara. Vetëm pastaj aktivizo Trash për kategori të miratuara.
-8. Shto adapterë zyrtarë për simulatorë dhe Docker kur fshirja direkte e folderëve s’është veprimi i duhur. **[simulatorët: e implementuar në 0.5; Docker: e planifikuar]**
+8. Shto adapterë zyrtarë për simulatorë dhe Docker kur fshirja direkte e folderëve s’është veprimi i duhur. **[simulatorët: e implementuar në 0.5; Docker: e implementuar në 0.5.7, shih më poshtë]**
 
 **Simulatorët (0.5, 30 tetor 2026) — e implementuar:** skanimi ekzekuton dy komanda vetëm-lexim
 (`xcrun simctl runtime list -j`, `xcrun simctl list devices -j`) përmes `ToolRunner`, i vetmi vend
@@ -206,7 +206,19 @@ versioni i të cilit nuk lexohet deklarohet në arsye. Fixtures pozitive/negativ
 `~/.kotlin` (daemon-i i Kotlin-it), `~/.m2` dhe cache-t e Android Studio-s nuk preken; një projekt
 jashtë folderëve të zgjedhur nuk konsultohet, prandaj zgjidh rrënjët para se të pastrosh.
 
-**Docker:** inventar fillimisht. Volumes dhe të dhëna të containers nuk trajtohen si cache; asnjë komandë e përgjithshme prune pa listë konkrete dhe konfirmim.
+**Docker (0.5.7, 30 tetor 2026) — e implementuar:** skanimi lexon `docker image ls`, `docker
+container ls --all --size` dhe `docker buildx du --verbose` përmes `ToolRunner` dhe ofron imazhe që
+asnjë container nuk i referon (edhe një container i ndalur e mban imazhin, siç do ta refuzonte
+vetë docker), containers të ndalur dhe hyrje të build cache-it, secila të paktën 1 MB dhe 30
+ditë pa përdorim. Heqja bëhet nga vetë docker, një artikull në herë, me ID që docker e raportoi
+dhe që validohet (12–64 hex) para se të bëhet argument, pas një ri-inventari: `docker image rm`,
+`docker container rm` pa `-v`, `docker buildx prune --filter id=`. Volumes nuk listohen dhe nuk
+preken kurrë; nuk ekziston asnjë prune i përgjithshëm (hyrja e vjetër `image prune -a` u hoq
+nga katalogu). Çdo rresht thotë se heqja është e përhershme dhe se `Docker.raw` zvogëlohet vetëm
+pasi Docker Desktop e kompakton ose riniset. Daemon i fikur ose docker i painstaluar: asgjë nuk
+listohet, pa paralajmërim. Fixtures në `DockerTests.swift`. **Kufizime:** pa daemon aktiv nuk u
+verifikua formati real i daljes në këtë Mac, vetëm formati i dokumentuar; skedarët e hartuar
+nga imazhet në përdorim nuk ndikohen.
 
 **Kriter përfundimi:** për çdo rregull, fixture pozitive/negative, dokumentacion aktual, kontroll aktiviteti dhe provë se projekti rindërtohet. Pa fshirje masive të folderëve me emër të zakonshëm.
 

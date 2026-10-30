@@ -196,6 +196,7 @@ public struct SimulatorRemover: ToolRemoving {
             switch removal {
             case .simulatorRuntime(let identifier): command = try ToolCommand.Catalogue.simulatorRuntimeDelete(identifier: identifier)
             case .simulatorDevice(let udid): command = try ToolCommand.Catalogue.simulatorDeviceDelete(udid: udid)
+            default: throw SafetyError.refused("This item is not a simulator.")
             }
             let (runtimes, devices) = try await SimulatorScan(runner: runner).inventory()
             let current = SimulatorRules.candidates(runtimes: runtimes, devices: devices)
@@ -203,17 +204,17 @@ public struct SimulatorRemover: ToolRemoving {
                 throw SafetyError.changedSinceScan
             }
             _ = try await runner.run(command)
-            return CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: item.bytes, error: nil, method: .tool)
+            return CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: item.bytes, error: nil, method: .tool, tool: "simctl")
         } catch is CancellationError {
             return CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
-                error: "Cleanup stopped before this item was removed.", failure: .other, method: .tool)
+                error: "Cleanup stopped before this item was removed.", failure: .other, method: .tool, tool: "simctl")
         } catch SafetyError.changedSinceScan {
             return CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
                 error: "The simulator was used or changed since the scan, so it was left in place. Scan again.",
-                failure: .changed, method: .tool)
+                failure: .changed, method: .tool, tool: "simctl")
         } catch {
             return CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
-                error: "\(error.localizedDescription) The item was left in place.", failure: .other, method: .tool)
+                error: "\(error.localizedDescription) The item was left in place.", failure: .other, method: .tool, tool: "simctl")
         }
     }
 }

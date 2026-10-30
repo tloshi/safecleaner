@@ -50,6 +50,35 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.7 — Docker images, containers and build cache through the docker command, 30 October 2026
+
+- Tool-managed candidates in a new "Docker" category: images no container references (a
+  stopped container keeps its image, as `docker image rm` would refuse it), stopped containers
+  and reclaimable build-cache entries, each at least 1 MB and 30 days idle. Three read-only
+  inventories at scan time; per-item removals by a validated ID after a re-inventory; no `-f`,
+  no `-v`, no prune without an `id=` filter, no volume command anywhere in the catalogue, and
+  the legacy `image prune -a` entry is gone. The daemon stopped or docker absent is a quiet
+  skip. Every surface that said "simctl" now names the tool: rows, selection caption,
+  confirmation, result title and subtitle, banner and Activity, including "simctl and docker"
+  for a mixed selection.
+- On the author's Mac the daemon was not running (`Docker.raw` 21 GB on disk), so the live
+  output formats were not exercised here; the parsers follow docker's documented `--format
+  json` fields and `buildx du --verbose` layout and are pinned by fixtures.
+- **226 XCTest tests passed:** 163 core, 56 presentation, 7 service. New tests cover size,
+  date and relative-age parsing, JSON-lines and block parsing, the rules (used, stopped-only,
+  fresh, empty-layer and live-cache cases all kept), the quiet-skip and issue paths of the
+  scan, the remover's re-list and changed-item path with the exact argument vectors, ID
+  validation against tags, flags and uppercase, the absence of any bare prune or volume
+  command, routing through `ToolRemovers`, and the two-tool presentation strings.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `Docker.swift`. Version 0.5.7 (14).
+
+### Not performed
+
+- Nothing was removed on the author's Mac, and no real `docker` command ran during the work
+  because the daemon was stopped. The first real run should be a scan with Docker Desktop
+  open, checking that the listed items match `docker system df -v`.
+
 ## 0.5.6 — IDE caches by version, 30 October 2026
 
 - Older Android Studio and JetBrains cache versions are Trash candidates with the product as

@@ -6,6 +6,7 @@ import SafeCleanerCore
 struct LocalScanService: ScanServicing {
     /// Optional so a workspace without Xcode, or a test, scans the filesystem alone.
     var simulators: SimulatorScan?
+    var docker: DockerScan?
     func scan(configuration: ScanConfiguration, progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport {
         let worker = Task.detached(priority: .userInitiated) {
             try DiskScanner().scan(configuration: configuration, progress: progress)
@@ -18,6 +19,13 @@ struct LocalScanService: ScanServicing {
         if let simulators {
             progress("Simulator runtimes and devices")
             let extra = await simulators.run(exclusions: configuration.exclusions)
+            try Task.checkCancellation()
+            report.candidates += extra.candidates
+            report.issues += extra.issues
+        }
+        if let docker {
+            progress("Docker images, containers and build cache")
+            let extra = await docker.run(exclusions: configuration.exclusions)
             try Task.checkCancellation()
             report.candidates += extra.candidates
             report.issues += extra.issues

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable {
-    case developer, applications, browsers, logs, projects, simulators, android, xcode, gradle
+    case developer, applications, browsers, logs, projects, simulators, android, xcode, gradle, docker
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -14,6 +14,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .android: return "Android SDK"
         case .xcode: return "Xcode stores"
         case .gradle: return "Gradle & Kotlin"
+        case .docker: return "Docker"
         }
     }
     public var symbol: String {
@@ -27,6 +28,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .android: return "shippingbox"
         case .xcode: return "wrench.adjustable"
         case .gradle: return "cube.transparent"
+        case .docker: return "server.rack"
         }
     }
     public var detail: String {
@@ -40,6 +42,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .android: return "NDK versions and system images nothing names, and emulator snapshots"
         case .xcode: return "Older device symbols, documentation indexes, idle device logs and archives over 180 days old"
         case .gradle: return "Gradle versions and Kotlin/Native compilers no project names; shared dependency caches stay"
+        case .docker: return "Images no container uses, stopped containers and build cache idle for 30 days, removed by the docker command"
         }
     }
 }
@@ -50,6 +53,18 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
 public enum ToolRemoval: Codable, Sendable, Equatable, Hashable {
     case simulatorRuntime(identifier: String)
     case simulatorDevice(udid: String)
+    case dockerImage(id: String)
+    case dockerContainer(id: String)
+    case dockerBuildCache(id: String)
+    /// The short tool name the UI uses in "removed with …".
+    public var tool: String {
+        switch self {
+        case .simulatorRuntime, .simulatorDevice: return "simctl"
+        case .dockerImage, .dockerContainer, .dockerBuildCache: return "docker"
+        }
+    }
+    /// The command as a person would type it.
+    public var command: String { tool == "simctl" ? "xcrun simctl" : tool }
 }
 
 /// Recorded with each history entry so the Activity list says what actually happened.
@@ -155,14 +170,19 @@ public struct CleanupRecord: Identifiable, Codable, Sendable {
     public let failure: CleanupFailure?
     /// Optional for the same reason; nil reads as a Trash move.
     public let method: RemovalMethod?
+    /// The short name of the tool that removed it ("simctl", "docker"). Absent in histories
+    /// written before Docker existed, when the only tool was simctl.
+    public let tool: String?
     public init(originalPath: String, trashPath: String?, bytes: Int64, error: String?,
-                failure: CleanupFailure? = nil, method: RemovalMethod? = nil) {
+                failure: CleanupFailure? = nil, method: RemovalMethod? = nil, tool: String? = nil) {
         id = UUID(); date = Date(); self.originalPath = originalPath
         self.trashPath = trashPath; self.bytes = bytes; self.error = error
         self.failure = error == nil ? nil : (failure ?? .other)
-        self.method = method
+        self.method = method; self.tool = tool
     }
     public var isToolRemoval: Bool { method == .tool }
+    /// The tool a removal went through, defaulting to simctl for histories older than the field.
+    public var toolName: String? { isToolRemoval ? (tool ?? "simctl") : nil }
 }
 
 public enum SafetyError: LocalizedError {

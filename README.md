@@ -163,6 +163,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
+- Docker images no container uses, stopped containers and build cache idle for 30 days, each removed by the docker command by ID, never volumes, never a bare prune (0.5.7).
 - IDE caches by version: older Android Studio and JetBrains caches offered one by one, the newest kept; VS Code and Cursor cache folders, never settings or workspace state (0.5.6).
 - Before any move: items a running process holds open are left in place and the process named; items you cannot write are listed as not movable; nothing inside credential, mail or backup stores is ever offered; a move counts only once the source is gone (0.5.3).
 - Gradle version caches, wrapper distributions and daemon logs no project names (the newest installed stays) plus Gradle's temporary folder, and Kotlin/Native compilers and shared LLVM toolchains nothing names; `modules-2`, `build-cache-1`, configuration and JDKs are never offered (0.5.4).
@@ -225,6 +226,19 @@ siblings that are not versioned, such as Chrome's cache inside the Google folder
 of their own so nothing drops out of the picture. VS Code and Cursor keep caches beside their
 settings in Application Support; only the cache folders are offered, never settings,
 extensions or workspace state. Quit the IDE before cleaning.
+
+## Docker (0.5.7)
+
+When Docker Desktop is installed and running, scanning lists images no container uses,
+stopped containers and build-cache entries, each idle for 30 days, by reading `docker image
+ls`, `docker container ls` and `docker buildx du`. Like simulators, these are removed by the
+tool, one item at a time, by an ID docker itself reported and re-checked immediately before
+removal: `docker image rm`, `docker container rm` without `-v`, and `docker buildx prune` with
+an `id=` filter. Volumes are never listed or touched and no bare prune exists. An image a
+stopped container still references is kept, exactly as docker would refuse it. Every row says
+the removal is permanent and that `Docker.raw`, Docker's disk file, shrinks only after Docker
+Desktop compacts it or restarts. With the daemon stopped or Docker not installed, nothing is
+listed and nothing is warned about.
 
 ## Safety pack (0.5.3)
 

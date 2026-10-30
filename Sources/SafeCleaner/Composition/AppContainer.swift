@@ -18,13 +18,14 @@ import SafeCleanerPresentation
         }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let tools = ToolRunner()
+        let docker = ToolCommand.Catalogue.dockerExecutable()
         let repository = LocalCleaningRepository(
-            scanner: LocalScanService(simulators: SimulatorScan(runner: tools)), cleaner: LocalCleanupService(),
+            scanner: LocalScanService(simulators: SimulatorScan(runner: tools), docker: docker.map { DockerScan(runner: tools, executable: $0) }), cleaner: LocalCleanupService(),
             disk: LocalDiskInfoService(home: home),
             settings: UserDefaultsSettingsStore(defaults: .standard),
             history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/SafeCleaner/history.json")),
             desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home,
-            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore(), tools: SimulatorRemover(runner: tools),
+            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore(), tools: ToolRemovers(simulators: SimulatorRemover(runner: tools), docker: docker.map { DockerRemover(runner: tools, executable: $0) }),
             openFiles: LibprocOpenFileService())
         return WorkspaceViewModel(repository: repository, homePath: home.path, version: bundleVersion)
     }
