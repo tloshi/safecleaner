@@ -145,6 +145,22 @@ atij build-i humbet; kurrë të parazgjedhura. Fixtures pozitive/negative në `X
 `DVTDownloads` apo `~/Library/Caches/com.apple.dt.Xcode`; versioni më i ri i simboleve mbahet edhe
 kur pajisja është përditësuar që atëherë.
 
+**Paketa e sigurisë (0.5.3, 30 tetor 2026) — e implementuar:** (1) kontroll i skedarëve të hapur
+përmes libproc menjëherë para çdo lëvizjeje në Trash: nëse një proces i përdoruesit mban të hapur
+një skedar, folderin e punës ose ekzekutuesin brenda artikullit, artikulli lihet në vend dhe
+procesi emërtohet me pid; tabela lexohet një herë për grup (rifreskohet pas 10 s); proceset e
+përdoruesve të tjerë nuk shihen pa root. (2) Lëvizje të verifikuara: një lëvizje numërohet vetëm
+kur burimi nuk ekziston më; artikujt që përdoruesi nuk mund t'i shkruajë listohen si "Not
+movable" në vend që të dështojnë më vonë. (3) Lista e vendeve që nuk ofrohen kurrë (`~/.ssh`,
+`~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`, keychains, Mail, Messages, Safari, cookies,
+accounts, preferences, backup-et e iPhone-it, Photos, iCloud/CloudStorage), e zbatuar në skaner
+dhe sërish në motorin e pastrimit. (4) Full Disk Access: aplikacioni mban mend se të dërgoi te
+paneli dhe në nisjen tjetër thotë nëse leja është aktive. (5) Teste strukturore: `swift test`
+provon nga pema e burimit se vetëm një vend lëviz në Trash, asgjë nuk fshin, vetëm një vend nis
+procese, vetëm një flet me rrjetin dhe vetëm një lexon tabelën e proceseve. **Kufizime:**
+skedarët e hartuar në memorie (dylib të ngarkuara) nuk numërohen si të hapur; nuk ka ende
+njoftim periodik pa skanim, pamje "çfarë u rrit" apo etiketë "tipike / vendim i yti".
+
 **Docker:** inventar fillimisht. Volumes dhe të dhëna të containers nuk trajtohen si cache; asnjë komandë e përgjithshme prune pa listë konkrete dhe konfirmim.
 
 **Kriter përfundimi:** për çdo rregull, fixture pozitive/negative, dokumentacion aktual, kontroll aktiviteti dhe provë se projekti rindërtohet. Pa fshirje masive të folderëve me emër të zakonshëm.

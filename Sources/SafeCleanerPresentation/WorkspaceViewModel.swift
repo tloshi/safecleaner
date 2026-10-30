@@ -33,8 +33,16 @@ import SafeCleanerCore
             catch { session.message = error.localizedDescription }
             session.access = DiskAccess.report(home: URL(fileURLWithPath: homePath),
                                                projectRoots: snapshot.settings.projectRoots)
+            // The user was sent to the Full Disk Access pane last time. macOS applies that
+            // grant only after a relaunch, so this launch is where the outcome can be told.
+            if snapshot.settings.awaitingFullDiskAccess {
+                session.message = session.access.needsSystemSettings
+                    ? "Full Disk Access is still off for SafeCleaner, so some locations stay hidden. Turn it on in System Settings, then quit and reopen the app."
+                    : "Full Disk Access is on. Scan again to include the locations that were hidden before."
+                repository.acknowledgeFullDiskAccessOutcome()
+            }
         }
-        if !snapshot.notices.isEmpty { session.message = snapshot.notices.joined(separator: "\n") }
+        if !snapshot.notices.isEmpty { session.message = ([session.message].compactMap { $0 } + snapshot.notices).joined(separator: "\n") }
         if let previewReport { apply(previewReport) }
         session.operation = .idle
         publish()

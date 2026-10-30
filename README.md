@@ -163,6 +163,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
+- Before any move: items a running process holds open are left in place and the process named; items you cannot write are listed as not movable; nothing inside credential, mail or backup stores is ever offered; a move counts only once the source is gone (0.5.3).
 - Third-party immediate children of `~/Library/Caches`, individually reviewed; Apple caches are excluded.
 - Browser cache classification in user cache locations. Browser profiles are not targeted.
 - `.log` files under user logs that have not changed for over 30 days.
@@ -199,6 +200,31 @@ received nothing new for 30 days; and archives older than 180 days. An archive i
 copy of a signed build and its symbols, so its row names the app, version and bundle
 identifier and says what symbolication is lost; nothing is ever preselected. All of these move
 to Trash. Quit Xcode before cleaning; while it is open these items are left in place.
+
+## Safety pack (0.5.3)
+
+Four guards taken from the open-source cleaner survey, each with fixtures:
+
+- **Open-file check.** Immediately before a Trash move, the app reads what your own processes
+  hold open through libproc (file descriptors, working directories, executables) and leaves an
+  item in place when any of them sits inside it, naming the process and its pid. A Gradle
+  daemon or a stand-alone emulator blocks only its own folder. Other users' processes are not
+  visible without root, so this is a guard, not a proof.
+- **Verified moves.** A move counts only once the source is gone; a Trash operation that
+  reports success while the item is still there is recorded as a failure with nothing freed.
+  Items you cannot write are measured and listed as *Not movable* instead of failing later;
+  SafeCleaner never asks for administrator rights.
+- **Never-offer list.** Nothing inside `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.kube`, `~/.docker`,
+  keychains, Mail, Messages, Safari, cookies, accounts, preferences, iPhone backups, Photos or
+  cloud mirrors is offered or moved, whichever rule matched it, even inside a project folder
+  you pointed at one of them.
+- **Full Disk Access.** macOS applies the grant only after a relaunch, so the app remembers
+  that it sent you to the settings pane and, on the next launch, says whether access is on and
+  that a new scan will include what was hidden.
+- **Structural tests.** `swift test` proves from the source tree that exactly one place moves
+  files to Trash, nothing deletes, one place launches a process, one place talks to the network
+  and one place reads process tables, and that views and presentation never touch the
+  filesystem.
 
 ## Claude review (0.4)
 

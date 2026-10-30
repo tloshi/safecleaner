@@ -17,7 +17,7 @@ public struct BlockingAppState: Identifiable, Equatable {
     public let note: String?
 }
 
-public enum CleanupIssueKind: Sendable, Equatable { case permission, ownership, changed, stopped, other }
+public enum CleanupIssueKind: Sendable, Equatable { case permission, ownership, changed, inUse, stopped, other }
 
 public struct CleanupIssueState: Identifiable, Equatable {
     public let id: String
@@ -155,6 +155,11 @@ enum CleanupResultPresenter {
         if changed > 0 {
             rows.append(.init(id: "changed", kind: .changed, title: "\(items(changed)) changed after the scan",
                 detail: "\(changed == 1 ? "It was" : "They were") left in place. Scan again to measure \(changed == 1 ? "it" : "them") fresh."))
+        }
+        let inUse = outcome.failed.filter { $0.failure == .inUse }
+        if !inUse.isEmpty {
+            rows.append(.init(id: "inUse", kind: .inUse, title: "\(items(inUse.count)) in use by a running process",
+                              detail: unique(inUse.compactMap(\.error)).prefix(3).joined(separator: " ")))
         }
         // `.appRunning` with no known owner cannot get an app row, so it is reported here.
         let other = outcome.failed.filter {

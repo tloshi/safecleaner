@@ -4,8 +4,12 @@ public struct WorkspaceSettings: Equatable, Sendable {
     public var projectRoots: [URL]
     public var exclusions: [URL]
     public var protectedProjects: [URL]
-    public init(projectRoots: [URL] = [], exclusions: [URL] = [], protectedProjects: [URL] = []) {
+    /// Set when the user was sent to the Full Disk Access pane. macOS applies that grant only
+    /// after a relaunch, so the next launch reports the outcome once and clears this.
+    public var awaitingFullDiskAccess: Bool
+    public init(projectRoots: [URL] = [], exclusions: [URL] = [], protectedProjects: [URL] = [], awaitingFullDiskAccess: Bool = false) {
         self.projectRoots = projectRoots; self.exclusions = exclusions; self.protectedProjects = protectedProjects
+        self.awaitingFullDiskAccess = awaitingFullDiskAccess
     }
 }
 
@@ -103,6 +107,32 @@ public protocol ToolRemoving: Sendable {
     func remove(_ item: Candidate) async -> CleanupRecord
 }
 
+/// One thing a process holds: an open file, its working directory or its executable.
+public struct ProcessUse: Sendable, Equatable, Hashable {
+    public let pid: Int32
+    public let name: String
+    public let path: String
+    public init(pid: Int32, name: String, path: String) { self.pid = pid; self.name = name; self.path = path }
+}
+/// A point-in-time table of what this user's processes hold, read once per cleanup batch.
+public struct OpenFileIndex: Sendable {
+    public let uses: [ProcessUse]
+    public init(uses: [ProcessUse]) { self.uses = uses }
+    /// Processes holding anything at or inside `url`, once each, in pid order.
+    public func uses(inside url: URL) -> [ProcessUse] {
+        var seen = Set<Int32>()
+        return uses.filter { use in
+            let path = URL(fileURLWithPath: use.path)
+            guard FileSafety.isSame(path, url) || FileSafety.isInside(path, root: url) else { return false }
+            return seen.insert(use.pid).inserted
+        }.sorted { $0.pid < $1.pid }
+    }
+}
+/// Reads the process table. Read-only by contract; the implementation lives in Services.
+public protocol OpenFileChecking: Sendable {
+    func index() async -> OpenFileIndex
+}
+
 @MainActor public protocol CleaningRepository: AnyObject {
     func setProjectProtection(_ url: URL, protected: Bool) throws -> WorkspaceSettings
     func hasClaudeKey() throws -> Bool
@@ -123,6 +153,8 @@ public protocol ToolRemoving: Sendable {
     func resetHistory() async throws -> [CleanupRecord]
     func reveal(_ url: URL)
     func openFullDiskAccessSettings()
+    /// The launch after a Full Disk Access request has reported its outcome; forget the request.
+    func acknowledgeFullDiskAccessOutcome()
     func applicationNames(for bundleIDs: [String]) -> [String: String]
     func quitApplication(_ bundleID: String) async -> AppQuitOutcome
 }
@@ -138,6 +170,7 @@ extension CleaningRepository {
         throw SafetyError.refused("Project protection is unavailable in this workspace.")
     }
     public func hasClaudeKey() throws -> Bool { false }
+    public func acknowledgeFullDiskAccessOutcome() {}
     public func applicationNames(for bundleIDs: [String]) -> [String: String] { [:] }
     public func quitApplication(_ bundleID: String) async -> AppQuitOutcome { .stillRunning }
     public func saveClaudeKey(_ key: String) async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }

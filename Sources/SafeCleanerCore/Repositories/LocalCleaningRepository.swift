@@ -13,6 +13,11 @@ import Foundation
     private let advisor: (any ClaudeAdvising)?
     private let apiKeys: (any APIKeyStoring)?
     private let tools: (any ToolRemoving)?
+    private let openFiles: (any OpenFileChecking)?
+    /// One process table per batch, refreshed when older than this, so a long cleanup
+    /// neither re-reads it per item nor trusts a stale one.
+    static let openFileIndexMaxAge: TimeInterval = 10
+    private var openFileCache: (built: Date, index: OpenFileIndex)?
     private var settings = WorkspaceSettings()
     private var history: [CleanupRecord] = []
     private var historyAvailable = false
@@ -23,11 +28,11 @@ import Foundation
                 history: any HistoryStoring, desktop: any DesktopInteracting,
                 validator: any ProjectRootValidating, home: URL,
                 advisor: (any ClaudeAdvising)? = nil, apiKeys: (any APIKeyStoring)? = nil,
-                tools: (any ToolRemoving)? = nil) {
+                tools: (any ToolRemoving)? = nil, openFiles: (any OpenFileChecking)? = nil) {
         self.scanner = scanner; self.cleaner = cleaner; self.disk = disk
         self.settingsStore = settings; self.historyStore = history
         self.desktop = desktop; self.validator = validator; self.home = home
-        self.advisor = advisor; self.apiKeys = apiKeys; self.tools = tools
+        self.advisor = advisor; self.apiKeys = apiKeys; self.tools = tools; self.openFiles = openFiles
     }
 
     public func hasClaudeKey() throws -> Bool { try apiKeys?.hasKey() ?? false }
@@ -140,6 +145,7 @@ import Foundation
         }
         cleaning = true
         defer { cleaning = false }
+        openFileCache = nil
         // Refuse to start if we cannot persist activity. Never overwrite unreadable history.
         try await historyStore.save(history)
         var completed: [CleanupRecord] = []
@@ -168,6 +174,11 @@ import Foundation
                         error: "Tool removal is unavailable in this workspace. The item was left in place.",
                         failure: .other, method: .tool)
                 }
+            } else if let uses = await openFileUses(of: item), !uses.isEmpty {
+                // A process with something inside the item open would have files pulled out
+                // from under it. Only this user's processes are visible without root.
+                record = CleanupRecord(originalPath: item.url.path, trashPath: nil, bytes: 0,
+                    error: "In use by \(Self.describe(uses)). Stop \(uses.count == 1 ? "it" : "them"), then clean again.", failure: .inUse)
             } else {
                 record = await cleaner.moveToTrash(item)
             }
@@ -182,6 +193,20 @@ import Foundation
         progress(CleanupProgress(completed: completed.count, total: items.count, bytesCompleted: bytesDone,
                                  bytesTotal: bytesTotal, current: nil, currentBytes: 0))
         return CleanupBatchResult(records: completed, history: history)
+    }
+    private func openFileUses(of item: Candidate) async -> [ProcessUse]? {
+        guard let openFiles else { return nil }
+        if let cache = openFileCache, Date().timeIntervalSince(cache.built) <= Self.openFileIndexMaxAge {
+            return cache.index.uses(inside: item.url)
+        }
+        let index = await openFiles.index()
+        openFileCache = (Date(), index)
+        return index.uses(inside: item.url)
+    }
+    static func describe(_ uses: [ProcessUse]) -> String {
+        let names = uses.prefix(3).map { "\($0.name) (pid \($0.pid))" }
+        let more = uses.count - names.count
+        return names.joined(separator: ", ") + (more > 0 ? " and \(more) more" : "")
     }
     /// Discarding the history is destructive to the activity log, so it stays an explicit
     /// user action and never happens automatically on a read failure. The in-memory history
@@ -207,5 +232,15 @@ import Foundation
     }
 
     public func reveal(_ url: URL) { desktop.reveal(url) }
-    public func openFullDiskAccessSettings() { desktop.openFullDiskAccessSettings() }
+    public func openFullDiskAccessSettings() {
+        desktop.openFullDiskAccessSettings()
+        // macOS applies the grant only after a relaunch; the next launch reports the outcome.
+        var updated = settings; updated.awaitingFullDiskAccess = true
+        _ = try? persist(updated)
+    }
+    public func acknowledgeFullDiskAccessOutcome() {
+        guard settings.awaitingFullDiskAccess else { return }
+        var updated = settings; updated.awaitingFullDiskAccess = false
+        _ = try? persist(updated)
+    }
 }

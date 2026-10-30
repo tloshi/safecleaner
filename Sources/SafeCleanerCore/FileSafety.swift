@@ -16,6 +16,26 @@ public enum FileSafety {
         return path.count > base.count && Array(path.prefix(base.count)) == base
     }
 
+    /// Locations never offered or moved, whatever rule matches inside them: credentials,
+    /// mail, messages, keychains, device backups and cloud mirrors. Relative to home and
+    /// matched by path component. Documents and Desktop are not here on purpose: people keep
+    /// projects there, and their build output must stay cleanable.
+    public static let sensitiveLocations = [
+        ".ssh", ".gnupg", ".aws", ".kube", ".docker", ".config/gcloud", ".config/gh", ".Trash",
+        "Library/Keychains", "Library/Mail", "Library/Messages", "Library/Safari", "Library/Cookies",
+        "Library/Accounts", "Library/Preferences", "Library/Mobile Documents", "Library/CloudStorage",
+        "Library/Application Support/MobileSync", "Library/Application Support/AddressBook",
+        "Library/Application Support/com.apple.TCC", "Library/Photos", "Pictures/Photos Library.photoslibrary"
+    ]
+    /// The sensitive location `url` is at or inside, written as "~/…", or nil.
+    public static func sensitiveLabel(for url: URL, home: URL) -> String? {
+        for relative in sensitiveLocations {
+            let root = home.appendingPathComponent(relative)
+            if isSame(url, root) || isInside(url, root: root) { return "~/" + relative }
+        }
+        return nil
+    }
+
     /// Check all ancestors as well as the selected leaf. Do not resolve links and
     /// then authorize their destination: the link itself must cause a refusal.
     public static func validate(_ url: URL, root: URL) throws {
@@ -137,12 +157,22 @@ public struct CleanupEngine {
             guard candidate.removal == nil else {
                 throw SafetyError.refused("Tool-managed items are removed by their tool, not moved to Trash.")
             }
+            // A floor under every rule: nothing inside a credential, mail or backup store moves,
+            // whichever rule nominated it. Checked before the item is even read.
+            if let label = FileSafety.sensitiveLabel(for: candidate.url, home: FileManager.default.homeDirectoryForCurrentUser) {
+                throw SafetyError.refused("Inside \(label), which SafeCleaner never offers or moves.")
+            }
             let current = try FileSafety.snapshot(candidate.url, root: candidate.allowedRoot)
             guard current == candidate.stamp else { throw SafetyError.changedSinceScan }
             // Recheck the root chain immediately before moving. This is best-effort
             // protection against ordinary changes, not a hostile-process sandbox.
             try FileSafety.validate(candidate.url, root: candidate.allowedRoot)
             let destination = try trash(candidate.url)
+            // A move that reports success but leaves the source behind has freed nothing, so
+            // it is a failure, not bytes moved. Only a source that is gone counts.
+            if (try? FileManager.default.attributesOfItem(atPath: candidate.url.path)) != nil {
+                throw SafetyError.refused("The move reported success, but the item is still at its original location, so nothing was counted. Look in the Trash, then scan again.")
+            }
             return CleanupRecord(originalPath: candidate.url.path, trashPath: destination?.path,
                                  bytes: candidate.bytes, error: nil)
         } catch {
@@ -201,7 +231,7 @@ public struct CleanupEngine {
                 return "Something inside it changed during cleanup: \(error.localizedDescription) Scan again."
             }
             return "It no longer exists where the scan found it. Scan again."
-        case .appRunning, .other:
+        case .appRunning, .inUse, .other:
             return error.localizedDescription
         }
     }

@@ -38,6 +38,11 @@ public struct DiskScanner: Sendable {
                  reason: String, consequence: String, canTrash: Bool = true, owner: String? = nil) throws {
             try Task.checkCancellation()
             guard !excluded(url), exists(url) else { return }
+            // A floor under every rule, including a project root pointed at a credential folder.
+            if let label = FileSafety.sensitiveLabel(for: url, home: c.home) {
+                report.issues.append(.init(path: url.path, message: "Inside \(label), which SafeCleaner never offers."))
+                return
+            }
             guard !protected.contains(where: { FileSafety.isInside($0, root: url) }) else {
                 report.issues.append(.init(path: url.path, message: "Contains an excluded location; the entire parent is kept."))
                 return
@@ -48,9 +53,18 @@ public struct DiskScanner: Sendable {
             do {
                 let stamp = try FileSafety.snapshot(url, root: root)
                 guard stamp.logicalBytes > 0 else { return }
+                // An item this user cannot write is still measured and listed, but never
+                // selectable: the cleanup-time ownership error would only repeat this, and
+                // SafeCleaner does not ask for administrator rights. A file needs a writable
+                // parent to move; a folder must be writable itself as well.
+                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+                let writable = fm.isWritableFile(atPath: url.deletingLastPathComponent().path)
+                    && (!isDirectory || fm.isWritableFile(atPath: url.path))
+                let blocker = writable ? nil
+                    : "Owned by another user or read-only, so it cannot move to Trash from here; SafeCleaner does not ask for administrator rights."
                 report.candidates.append(Candidate(url: url, title: title, category: category,
                     reason: reason, consequence: consequence, stamp: stamp, allowedRoot: root,
-                    canTrash: canTrash, ownerBundleID: owner))
+                    canTrash: canTrash && writable, ownerBundleID: owner, blocker: blocker))
             } catch is CancellationError { throw CancellationError() }
             catch { report.issues.append(.init(path: url.path, message: error.localizedDescription)) }
         }

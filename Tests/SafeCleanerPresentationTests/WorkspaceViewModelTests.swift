@@ -899,6 +899,55 @@ import SafeCleanerCore
         XCTAssertFalse(vm.state.canConfirmCleanup)
         XCTAssertEqual(repository.scans + repository.cleanCalls + repository.settingsWrites + repository.reveals, 0)
     }
+
+    // MARK: Safety pack (0.5.3)
+
+    /// macOS applies Full Disk Access only after a relaunch, so the follow-up happens at the
+    /// next start: the grant is confirmed or its absence said, once, and the flag is cleared.
+    func testFullDiskAccessOutcomeIsReportedOnTheNextLaunch() async {
+        let repository = FakeRepository()
+        repository.settings.awaitingFullDiskAccess = true
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "t")
+        await vm.start()
+        XCTAssertTrue(vm.state.message?.contains("Full Disk Access") == true, vm.state.message ?? "nil")
+        XCTAssertEqual(repository.accessAcknowledged, 1)
+        let quiet = FakeRepository()
+        let second = WorkspaceViewModel(repository: quiet, homePath: "/fixture", version: "t")
+        await second.start()
+        XCTAssertNil(second.state.message)
+        XCTAssertEqual(quiet.accessAcknowledged, 0)
+    }
+
+    func testItemsInUseGetTheirOwnResultRow() async {
+        let first = fixture("first"), second = fixture("second")
+        let (vm, repository) = await ready([first, second])
+        repository.cleanupResult = .init(records: [
+            CleanupRecord(originalPath: first.id, trashPath: nil, bytes: 0, error: "In use by java (pid 4242). Stop it, then clean again.", failure: .inUse),
+            CleanupRecord(originalPath: second.id, trashPath: "/synthetic-trash/2", bytes: 100, error: nil)
+        ], history: [])
+        vm.send(.toggleSelectAll); vm.send(.openConfirmation); vm.send(.acknowledge(true))
+        await vm.send(.confirmCleanup)?.value
+        let result = vm.state.cleanupResult
+        XCTAssertEqual(result?.issues.map(\.kind), [.inUse])
+        XCTAssertEqual(result?.issues.first?.title, "1 item in use by a running process")
+        XCTAssertTrue(result?.issues.first?.detail.contains("java") == true)
+        XCTAssertEqual(result?.offersFullDiskAccess, false)
+    }
+
+    func testAnUnwritableItemIsShownAsNotMovableAndCannotBeSelected() async {
+        var blocked = fixture("root-owned")
+        blocked = Candidate(url: blocked.url, title: blocked.title, category: blocked.category, reason: blocked.reason,
+            consequence: blocked.consequence, stamp: blocked.stamp, allowedRoot: blocked.allowedRoot, canTrash: false,
+            ownerBundleID: nil, blocker: "Owned by another user.")
+        let (vm, _) = await ready([blocked, fixture("fine")])
+        let row = vm.state.candidates.first { $0.title == "root-owned" }
+        XCTAssertEqual(row?.badge, "Not movable")
+        XCTAssertEqual(row?.canSelect, false)
+        XCTAssertTrue(row?.reason.hasPrefix("Owned by another user.") == true, row?.reason ?? "nil")
+        XCTAssertNotEqual(vm.state.categories.first { $0.category == .developer }?.count, "Scan only",
+                          "a category with one unmovable item and one cleanable item is not scan-only")
+    }
+
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {
@@ -997,4 +1046,6 @@ import SafeCleanerCore
     }
     func reveal(_ url: URL) { reveals += 1 }
     func openFullDiskAccessSettings() { settingsOpens += 1 }
+    var accessAcknowledged = 0
+    func acknowledgeFullDiskAccessOutcome() { accessAcknowledged += 1 }
 }

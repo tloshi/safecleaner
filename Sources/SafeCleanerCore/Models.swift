@@ -83,14 +83,18 @@ public struct Candidate: Identifiable, Codable, Sendable {
     /// Set when the owning tool removes the item instead of a Trash move. `canTrash` still
     /// means "selectable for cleanup"; the consequence text says it is permanent.
     public let removal: ToolRemoval?
+    /// Why a measured item cannot be selected even though its rule matched: this user cannot
+    /// write it, and the app does not ask for administrator rights. Listed so the bytes are
+    /// not silently missing from the picture.
+    public let blocker: String?
     public var bytes: Int64 { stamp.allocatedBytes }
     public init(url: URL, title: String, category: CleanCategory, reason: String,
                 consequence: String, stamp: TreeStamp, allowedRoot: URL,
-                canTrash: Bool, ownerBundleID: String?, removal: ToolRemoval? = nil) {
+                canTrash: Bool, ownerBundleID: String?, removal: ToolRemoval? = nil, blocker: String? = nil) {
         self.url = url; self.title = title; self.category = category
         self.reason = reason; self.consequence = consequence; self.stamp = stamp
         self.allowedRoot = allowedRoot; self.canTrash = canTrash; self.ownerBundleID = ownerBundleID
-        self.removal = removal
+        self.removal = removal; self.blocker = blocker
     }
 }
 
@@ -126,6 +130,8 @@ public enum CleanupFailure: String, Codable, Sendable {
     case appRunning
     /// The item no longer matches what the scan measured.
     case changed
+    /// A process of this user holds something inside the item open, so it was left in place.
+    case inUse
     case other
 
     /// An unknown value from a newer build must not make the whole history unreadable,

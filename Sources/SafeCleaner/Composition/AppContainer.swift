@@ -24,7 +24,8 @@ import SafeCleanerPresentation
             settings: UserDefaultsSettingsStore(defaults: .standard),
             history: JSONHistoryStore(url: home.appendingPathComponent("Library/Application Support/SafeCleaner/history.json")),
             desktop: MacDesktopService(), validator: LocalProjectValidator(home: home), home: home,
-            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore(), tools: SimulatorRemover(runner: tools))
+            advisor: ClaudeService(), apiKeys: KeychainAPIKeyStore(), tools: SimulatorRemover(runner: tools),
+            openFiles: LibprocOpenFileService())
         return WorkspaceViewModel(repository: repository, homePath: home.path, version: bundleVersion)
     }
 }

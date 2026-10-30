@@ -111,6 +111,7 @@ private struct IssueRow: View {
         case .ownership: return "person.crop.circle.badge.exclamationmark"
         case .changed: return "arrow.triangle.2.circlepath"
         case .stopped: return "pause.circle"
+        case .inUse: return "cpu"
         case .other: return "exclamationmark.circle"
         }
     }

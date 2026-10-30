@@ -9,10 +9,10 @@ import XCTest
     }
     private func make(settings: FakeSettings? = nil, history: FakeHistory = FakeHistory(),
                       desktop: FakeDesktop? = nil, cleaner: FakeCleaner = FakeCleaner(),
-                      tools: (any ToolRemoving)? = nil) -> LocalCleaningRepository {
+                      tools: (any ToolRemoving)? = nil, openFiles: (any OpenFileChecking)? = nil) -> LocalCleaningRepository {
         .init(scanner: FakeScanner(), cleaner: cleaner, disk: FakeDisk(), settings: settings ?? FakeSettings(),
             history: history, desktop: desktop ?? FakeDesktop(), validator: FakeValidator(), home: URL(fileURLWithPath: "/fixture"),
-            tools: tools)
+            tools: tools, openFiles: openFiles)
     }
     private func simulator() -> Candidate {
         Candidate(url: URL(fileURLWithPath: "/Library/Developer/CoreSimulator/Volumes/iOS-26-2"), title: "iOS 26.2 simulator runtime",
@@ -280,6 +280,49 @@ import XCTest
         let moves = await cleaner.calls
         XCTAssertEqual(moves, 0)
     }
+
+    // MARK: Open-file check (0.5.3)
+
+    /// A process holding something inside an item open would have files pulled out from
+    /// under it. The item is left in place with the process named; the rest proceed.
+    func testItemsWithOpenFilesAreLeftInPlaceAndNameTheProcess() async throws {
+        let cleaner = FakeCleaner()
+        let busy = fixture("gradle"), idle = fixture("npm")
+        let openFiles = FakeOpenFiles(uses: [ProcessUse(pid: 4242, name: "java", path: busy.url.appendingPathComponent("daemon.lock").path)])
+        let repository = make(cleaner: cleaner, openFiles: openFiles)
+        _ = await repository.load()
+        let result = try await repository.clean([busy, idle])
+        XCTAssertEqual(result.records.map(\.failure), [.inUse, nil])
+        XCTAssertTrue(result.records[0].error?.contains("java") == true, result.records[0].error ?? "")
+        XCTAssertTrue(result.records[0].error?.contains("4242") == true, result.records[0].error ?? "")
+        XCTAssertEqual(result.records[0].bytes, 0)
+        let moves = await cleaner.calls
+        XCTAssertEqual(moves, 1)
+        let builds = await openFiles.builds
+        XCTAssertEqual(builds, 1, "one index per batch, not one per item")
+    }
+
+    func testOpenFileIndexMatchesByContainmentAndReportsEachProcessOnce() {
+        let index = OpenFileIndex(uses: [
+            ProcessUse(pid: 1, name: "java", path: "/fixture/gradle/a"), ProcessUse(pid: 1, name: "java", path: "/fixture/gradle/b"),
+            ProcessUse(pid: 2, name: "node", path: "/fixture/gradle-other/x"), ProcessUse(pid: 3, name: "zsh", path: "/fixture/gradle")])
+        let hits = index.uses(inside: URL(fileURLWithPath: "/fixture/gradle"))
+        XCTAssertEqual(hits.map(\.pid), [1, 3], "a sibling sharing a prefix is not a match; the folder itself is")
+    }
+
+    func testFullDiskAccessRequestIsRememberedUntilAcknowledged() async throws {
+        let settings = FakeSettings()
+        let repository = make(settings: settings)
+        _ = await repository.load()
+        repository.openFullDiskAccessSettings()
+        XCTAssertTrue(settings.saved.last?.awaitingFullDiskAccess == true)
+        repository.acknowledgeFullDiskAccessOutcome()
+        XCTAssertFalse(settings.saved.last?.awaitingFullDiskAccess ?? true)
+        let writes = settings.saved.count
+        repository.acknowledgeFullDiskAccessOutcome()
+        XCTAssertEqual(settings.saved.count, writes, "nothing to acknowledge, nothing written")
+    }
+
 }
 
 @MainActor private final class FakeAPIKeys: APIKeyStoring {
@@ -312,11 +355,12 @@ private struct FakeDisk: DiskInfoProviding {
 private struct FakeValidator: ProjectRootValidating { func validate(_ url: URL) throws {} }
 @MainActor private final class FakeSettings: SettingsStoring {
     var settings = WorkspaceSettings()
+    var saved: [WorkspaceSettings] = []
     var fail = false
     func load() -> WorkspaceSettings { settings }
     func save(_ settings: WorkspaceSettings) throws {
         if fail { throw SafetyError.refused("Injected settings error") }
-        self.settings = settings
+        self.settings = settings; saved.append(settings)
     }
 }
 @MainActor private final class FakeDesktop: DesktopInteracting {
@@ -359,4 +403,11 @@ private actor FakeCleaner: CleanupServicing {
         calls += 1
         return .init(originalPath: item.id, trashPath: "/synthetic-trash/\(calls)", bytes: item.bytes, error: nil)
     }
+}
+
+private actor FakeOpenFiles: OpenFileChecking {
+    let uses: [ProcessUse]
+    var builds = 0
+    init(uses: [ProcessUse]) { self.uses = uses }
+    func index() async -> OpenFileIndex { builds += 1; return OpenFileIndex(uses: uses) }
 }

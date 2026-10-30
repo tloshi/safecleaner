@@ -121,6 +121,24 @@ Xcode as owner, so exclusions, the snapshot digest, the running-owner check and 
 re-check apply unchanged. Archives are not regenerable, so the reason names the app, version,
 build and bundle identifier and the consequence says what symbolication is lost.
 
+## Safety pack (0.5.3)
+
+`OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of
+what this user's processes hold (open file descriptors, working directories, executables) as
+`ProcessUse` rows. `LibprocOpenFileService` in Services fills it through libproc, read-only, on
+a detached task. `LocalCleaningRepository.clean` reads the table once per batch (refreshed when
+older than ten seconds) and, for each Trash item, leaves it in place with `failure: .inUse` and
+the process names when anything in the table sits inside it; the result sheet shows those as
+one row. `FileSafety.sensitiveLocations` is the never-offer list, applied in the scanner's `add`
+(an issue, not a candidate) and again in `CleanupEngine.perform` before the item is read. The
+engine also verifies after `trashItem` that the source is gone, so a move that reported success
+while leaving the item in place is a failure. The scanner marks items the current user cannot
+write with `Candidate.blocker` and `canTrash = false`; the presenter shows them as *Not movable*.
+`WorkspaceSettings.awaitingFullDiskAccess` records that the user was sent to the Full Disk
+Access pane; the view model reports the outcome at the next launch and the repository clears the
+flag. `StructuralTests` read the `Sources` tree and pin the single Trash call, the absence of any
+delete, the single process launcher, the single network client and the single libproc reader.
+
 ## Optional Claude review (0.4)
 
 `AIReviewPacket` in Core groups candidates using a fixed label catalogue. The encoded payload

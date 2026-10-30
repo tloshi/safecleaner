@@ -42,7 +42,7 @@ enum WorkspacePresenter {
                 size: state.hasScanned ? byteLabel(bytes) : "—",
                 // Derived from the candidates, not assumed from the category. Projects were
                 // scan-only once and this label kept saying so after they became cleanable.
-                count: !items.isEmpty && items.allSatisfy { !$0.canTrash }
+                count: !items.isEmpty && items.allSatisfy { !$0.canTrash && $0.blocker == nil }
                     ? "Scan only"
                     : "\(items.count) \(items.count == 1 ? "item" : "items")",
                 fraction: found > 0 ? Double(bytes) / Double(found) : 0)
@@ -50,8 +50,8 @@ enum WorkspacePresenter {
         func row(_ item: Candidate) -> CandidateRowState {
             let abbreviated = item.url.path.hasPrefix(homePath + "/") ? "~" + item.url.path.dropFirst(homePath.count) : item.url.path
             return CandidateRowState(id: item.id, title: item.title, path: abbreviated, fullPath: item.url.path, size: byteLabel(item.bytes),
-                category: item.category, badge: item.removal != nil ? "Tool removal" : item.canTrash ? "Review first" : "Scan only",
-                reason: item.reason, consequence: item.consequence,
+                category: item.category, badge: item.removal != nil ? "Tool removal" : item.blocker != nil ? "Not movable" : item.canTrash ? "Review first" : "Scan only",
+                reason: item.blocker.map { "\($0) \(item.reason)" } ?? item.reason, consequence: item.consequence,
                 metadata: item.removal != nil
                     ? "Tool-managed · \(byteLabel(item.bytes)) reported by xcrun simctl · Removed by simctl, not Trash"
                     : "\(item.stamp.fileCount) files · \(byteLabel(item.stamp.logicalBytes)) logical · \(byteLabel(item.bytes)) allocated estimate",

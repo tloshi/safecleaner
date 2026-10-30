@@ -50,6 +50,45 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.3 — safety pack: open-file check, verified moves, never-offer list, Full Disk Access follow-up, structural tests, 30 October 2026
+
+- **Open-file check.** `LibprocOpenFileService` reads, through libproc, every file descriptor,
+  working directory and executable of this user's processes (1,324 processes in 0.2–0.6 s on
+  the author's Mac) into an `OpenFileIndex`; the repository reads it once per batch, refreshed
+  after ten seconds, and leaves an item in place with `failure: .inUse` naming the process and
+  pid when anything in it sits inside the item. Found while writing it: `proc_listallpids`
+  returns a pid count, not a byte length (an earlier reading dropped three quarters of the
+  table), and `withUnsafeBytes(of:)` on a Swift array reads the array header, not its
+  elements. Both are pinned by the service test, which opens a file in a synthetic folder and
+  must find and then lose itself.
+- **Verified moves.** `CleanupEngine` now fails a move whose source still exists after the
+  Trash operation returned; the scanner lists items this user cannot write as *Not movable*
+  (`Candidate.blocker`, `canTrash = false`) instead of failing them at cleanup.
+- **Never-offer list.** `FileSafety.sensitiveLocations` (credentials, keychains, Mail,
+  Messages, Safari, cookies, accounts, preferences, iPhone backups, Photos, iCloud and cloud
+  mirrors) is refused in the scanner (an issue) and again in the engine before the item is read.
+- **Full Disk Access.** The grant applies only after a relaunch, so `awaitingFullDiskAccess`
+  is persisted when the pane is opened and the next launch reports the outcome once.
+- **Structural tests** read `Sources` and pin: one `trashItem` call, no delete API anywhere,
+  `Process()` only in `ToolRunner`, `URLSession` only in `ClaudeService`, libproc only in
+  `OpenFileService`, and no filesystem, desktop or storage access in Views, DesignSystem or
+  Presentation.
+- **193 XCTest tests passed:** 131 core, 55 presentation, 7 service. `check-boundaries.py`
+  passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated for
+  `OpenFileService.swift`. Version 0.5.3 (10).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. The open-file check was not exercised against a real
+  Gradle daemon or emulator, only against the test process's own descriptor. Memory-mapped
+  files (loaded dylibs) are not descriptors and are not detected.
+- **Notarization of 0.5.2 and 0.5.3 did not happen.** The `safecleaner-notary` keychain profile,
+  which worked for 0.5.1 at 01:07 the same day, was no longer in the login keychain by 07:40
+  (`notarytool`: "No Keychain password item found for profile"). `scripts/build-app.sh
+  --notarize` signed the 0.5.2 app and then stopped before building a DMG; `build/SafeCleaner.dmg`
+  on disk is still the notarized 0.5.1. Only the author can re-store the profile (it needs the
+  Apple ID app-specific password).
+
 ## 0.5.2 — Xcode device symbols, documentation indexes, device logs and archives, 30 October 2026
 
 - Version-aware Trash candidates under `~/Library/Developer/Xcode`, no process: device

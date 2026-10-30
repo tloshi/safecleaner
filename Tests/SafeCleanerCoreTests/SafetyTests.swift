@@ -319,4 +319,71 @@ final class SafetyTests: XCTestCase {
         do { _ = try await task.value; XCTFail("Expected cancellation") }
         catch { XCTAssertTrue(error is CancellationError) }
     }
+
+    // MARK: Safety pack (0.5.3)
+
+    /// A Trash operation that reports a destination while the source is still in place has
+    /// freed nothing, so it must count as a failure rather than as bytes moved.
+    func testAMoveThatLeavesTheSourceInPlaceIsNotCountedAsSuccess() throws {
+        try file("cache/data")
+        let item = try candidate("cache")
+        let result = CleanupEngine(trash: { _ in self.home.appendingPathComponent("test-trash") }).perform(item)
+        XCTAssertNotNil(result.error)
+        XCTAssertEqual(result.bytes, 0)
+        XCTAssertNil(result.trashPath)
+        XCTAssertEqual(result.failure, .other)
+        XCTAssertTrue(result.error?.contains("still") == true, result.error ?? "")
+    }
+
+    func testSensitiveLocationsAreNamedRelativeToHomeAndMatchedByComponent() {
+        let home = URL(fileURLWithPath: "/Users/someone")
+        XCTAssertEqual(FileSafety.sensitiveLabel(for: home.appendingPathComponent(".ssh/node_modules"), home: home), "~/.ssh")
+        XCTAssertEqual(FileSafety.sensitiveLabel(for: home.appendingPathComponent("Library/Keychains"), home: home), "~/Library/Keychains")
+        XCTAssertEqual(FileSafety.sensitiveLabel(for: home.appendingPathComponent("Library/Application Support/MobileSync/Backup/x"), home: home),
+                       "~/Library/Application Support/MobileSync")
+        XCTAssertNil(FileSafety.sensitiveLabel(for: home.appendingPathComponent("Library/Caches/com.example"), home: home))
+        XCTAssertNil(FileSafety.sensitiveLabel(for: home.appendingPathComponent("Documents/app/build"), home: home),
+                     "project output under Documents stays cleanable")
+        XCTAssertNil(FileSafety.sensitiveLabel(for: home.appendingPathComponent(".sshkeys"), home: home), "component-aware, not a prefix match")
+    }
+
+    /// The denylist is a floor under every rule, including a project root a user points at a
+    /// credential folder by mistake. Checked before the snapshot, so it holds even when the
+    /// path is unreadable or absent.
+    func testEngineRefusesSensitiveLocationsBeforeTouchingThem() {
+        let realHome = FileManager.default.homeDirectoryForCurrentUser
+        let item = Candidate(url: realHome.appendingPathComponent(".ssh/node_modules"), title: "node_modules", category: .projects,
+            reason: "Test", consequence: "Test", stamp: .init(digest: "x", logicalBytes: 1, allocatedBytes: 1, fileCount: 1),
+            allowedRoot: realHome, canTrash: true, ownerBundleID: nil)
+        var called = false
+        let result = CleanupEngine(trash: { _ in called = true; return nil }).perform(item)
+        XCTAssertFalse(called)
+        XCTAssertTrue(result.error?.contains("~/.ssh") == true, result.error ?? "")
+        XCTAssertEqual(result.failure, .other)
+    }
+
+    func testScannerNeverOffersAnythingInsideASensitiveLocation() throws {
+        try file(".ssh/package.json", data: "{}")
+        try file(".ssh/node_modules/left-pad/index.js")
+        let report = try DiskScanner().scan(configuration: .init(home: home, projectRoots: [home.appendingPathComponent(".ssh")]))
+        XCTAssertFalse(report.candidates.contains { $0.url.path.contains(".ssh") })
+        XCTAssertTrue(report.issues.contains { $0.message.contains("~/.ssh") }, "\(report.issues.map(\.message))")
+    }
+
+    /// An item the current user cannot write is listed, measured and explained, but never
+    /// selectable, instead of failing at cleanup time with an ownership error.
+    func testUnwritableItemIsListedButNotMovable() throws {
+        try file("Library/Caches/com.example.locked/data")
+        let locked = home.appendingPathComponent("Library/Caches/com.example.locked")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+        try file("Library/Caches/com.example.fine/data")
+        let report = try DiskScanner().scan(configuration: .init(home: home))
+        let item = try XCTUnwrap(report.candidates.first { $0.url.lastPathComponent == "com.example.locked" })
+        XCTAssertFalse(item.canTrash)
+        XCTAssertTrue(item.blocker?.contains("administrator") == true, item.blocker ?? "nil")
+        XCTAssertGreaterThan(item.bytes, 0)
+        let fine = try XCTUnwrap(report.candidates.first { $0.url.lastPathComponent == "com.example.fine" })
+        XCTAssertTrue(fine.canTrash); XCTAssertNil(fine.blocker)
+    }
 }
