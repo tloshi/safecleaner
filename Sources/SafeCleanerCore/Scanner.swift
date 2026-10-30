@@ -91,11 +91,15 @@ public struct DiskScanner: Sendable {
                     reason: finding.reason, consequence: finding.consequence, owner: DerivedData.owner)
         }
 
+        // IDE caches by version and editor caches. A vendor folder that is split into
+        // per-version rows loses its whole-folder row, so nothing is counted twice.
+        let ideFindings = IDECaches.findings(home: c.home, fm: fm)
+        let splitVendors = IDECaches.vendors.filter { vendor in ideFindings.contains { $0.vendor == vendor } }
         if exists(cacheRoot) {
             do {
                 try FileSafety.validate(cacheRoot, root: c.home)
                 let children = try fm.contentsOfDirectory(at: cacheRoot, includingPropertiesForKeys: nil)
-                let reserved = ["Homebrew", "org.swift.swiftpm", "CocoaPods", "pip"]
+                let reserved = ["Homebrew", "org.swift.swiftpm", "CocoaPods", "pip"] + splitVendors
                 for url in children.sorted(by: { $0.path < $1.path }) {
                     let name = url.lastPathComponent
                     guard !name.hasPrefix("com.apple."), !name.hasPrefix("."), !reserved.contains(name) else { continue }
@@ -107,6 +111,10 @@ public struct DiskScanner: Sendable {
                 }
             } catch is CancellationError { throw CancellationError() }
             catch { report.issues.append(.init(path: cacheRoot.path, message: error.localizedDescription)) }
+        }
+        for finding in ideFindings {
+            try add(finding.url, title: finding.title, category: finding.category, root: finding.root,
+                    reason: finding.reason, consequence: finding.consequence, owner: finding.owner)
         }
 
         if exists(logRoot) {

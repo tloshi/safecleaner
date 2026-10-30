@@ -135,6 +135,18 @@ list, the writability guard, the snapshot digest and the open-file check apply u
 `AIReviewPacket` maps every candidate whose parent is `DerivedData` to the fixed label
 "Xcode DerivedData", so per-project folder names never enter the payload.
 
+## IDE caches by version (0.5.6)
+
+`IDECaches` in Core parses `<Product><version>` folder names under the vendor folders
+`Google` and `JetBrains` in `~/Library/Caches` (longest product prefix wins, so a preview build
+is its own product), keeps the newest version per product and offers the rest with the product's
+bundle identifier as owner. Siblings that carry no version become `vendorChild` rows (Chrome's
+cache is a browser row with Chrome as owner). A vendor folder is split only when it yields a
+per-version finding; the scanner then adds it to the reserved names of the `Library/Caches` pass
+so the whole-folder row disappears, and otherwise leaves that row alone. Editor caches are a
+fixed list of folders under `Application Support/Code`, `Code - Insiders`, `VSCodium` and
+`Cursor`; everything else beside them is settings or state and is never nominated.
+
 ## Safety pack (0.5.3)
 
 `OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of

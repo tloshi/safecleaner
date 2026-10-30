@@ -157,6 +157,18 @@ opsional me Claude i grupon të gjitha nën etiketën fikse "Xcode DerivedData",
 projektesh. Fixtures në `DerivedDataTests.swift`. **Kufizime:** nuk dallon ende cilin projekt e
 ka hapur Xcode (Xcode i hapur bllokon tërë grupin); nuk ofron `Index.noindex` veçmas.
 
+**Cache-t e IDE-ve sipas versionit (0.5.6, 30 tetor 2026) — e implementuar:** `IDECaches` lexon
+emrat `<Produkt><version>` nën `~/Library/Caches/Google` dhe `~/Library/Caches/JetBrains`
+(prefiksi më i gjatë fiton, kështu një build Preview është produkt më vete), mban versionin më
+të ri për çdo produkt dhe ofron të tjerët një nga një me bundle ID-në e produktit si pronar.
+Fëmijët pa version (cache-i i Chrome-it brenda folderit Google) marrin rreshtin e tyre, dhe
+folderi i vendorit ndahet vetëm kur jep një gjetje për version; përndryshe mbetet rreshti i
+zakonshëm. Cache-t e editorëve (VS Code, VS Code Insiders, VSCodium, Cursor) janë një listë
+fikse folderësh nën `Application Support`; `User`, `extensions`, `workspaceStorage` dhe të
+tjerat nuk propozohen kurrë. Fixtures në `IDECachesTests.swift`. **Kufizime:** versioni më i ri
+mbahet gjithmonë, edhe kur nuk përdoret prej muajsh (nuk ka rregull idle, sepse data e skedarit
+më të ri në një cache me qindra mijëra skedarë nuk matet me siguri).
+
 **Paketa e sigurisë (0.5.3, 30 tetor 2026) — e implementuar:** (1) kontroll i skedarëve të hapur
 përmes libproc menjëherë para çdo lëvizjeje në Trash: nëse një proces i përdoruesit mban të hapur
 një skedar, folderin e punës ose ekzekutuesin brenda artikullit, artikulli lihet në vend dhe

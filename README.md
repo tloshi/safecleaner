@@ -163,6 +163,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
+- IDE caches by version: older Android Studio and JetBrains caches offered one by one, the newest kept; VS Code and Cursor cache folders, never settings or workspace state (0.5.6).
 - Before any move: items a running process holds open are left in place and the process named; items you cannot write are listed as not movable; nothing inside credential, mail or backup stores is ever offered; a move counts only once the source is gone (0.5.3).
 - Gradle version caches, wrapper distributions and daemon logs no project names (the newest installed stays) plus Gradle's temporary folder, and Kotlin/Native compilers and shared LLVM toolchains nothing names; `modules-2`, `build-cache-1`, configuration and JDKs are never offered (0.5.4).
 - Third-party immediate children of `~/Library/Caches`, individually reviewed; Apple caches are excluded.
@@ -213,6 +214,17 @@ caches beside them (module cache, precompiled SDK modules, symbol cache, SDK sta
 compilation cache) are their own rows with their own cost; anything else at that level is
 left alone. Quit Xcode before cleaning. The optional Claude review keeps the single fixed
 label "Xcode DerivedData" for all of them, so no project name leaves your Mac.
+
+## IDE caches by version (0.5.6)
+
+Android Studio and the JetBrains IDEs keep one cache folder per version under
+`~/Library/Caches/Google` and `~/Library/Caches/JetBrains` and retire none, so those folders
+grow by one IDE per upgrade. Scanning now lists older versions one by one and always keeps the
+newest version of each product; the vendor folder is no longer one all-or-nothing row, and
+siblings that are not versioned, such as Chrome's cache inside the Google folder, keep rows
+of their own so nothing drops out of the picture. VS Code and Cursor keep caches beside their
+settings in Application Support; only the cache folders are offered, never settings,
+extensions or workspace state. Quit the IDE before cleaning.
 
 ## Safety pack (0.5.3)
 

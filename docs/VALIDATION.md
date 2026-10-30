@@ -50,6 +50,31 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.6 — IDE caches by version, 30 October 2026
+
+- Older Android Studio and JetBrains cache versions are Trash candidates with the product as
+  owner; the newest per product is kept without an idle rule, because the newest-file date of
+  a cache with hundreds of thousands of files cannot be measured within the scan's walk cap
+  and a wrong date would offer a live version. Measured read-only on the author's Mac:
+  `Google/AndroidStudio2025.3.4` 3.6 GB and `AndroidStudio2026.1.4` 5.5 GB offered,
+  `AndroidStudio2026.2.1` 3.1 GB kept; `Google/Chrome` 1.5 GB and `Chrome-headless` 5 MB as
+  browser rows; `JetBrains/IntelliJIdea2025.3` 2.9 GB kept (only version) and `Toolbox`
+  8.8 MB as its own row; VS Code cache folders 285 MB in eight rows; no Cursor folder.
+  Android Studio was running, so its rows would be held in place by the owner check.
+- **218 XCTest tests passed:** 156 core, 55 presentation, 7 service. New tests cover product
+  and version parsing (longest prefix, preview as its own product, no version or a stray
+  suffix rejected), newest-per-product retention, vendor siblings as their own rows with the
+  right category and owner, editor cache folders against settings, extensions and workspace
+  state, scanner integration (vendor folder row gone, per-version rows present, other caches
+  untouched, exclusions) and a vendor folder with a single version keeping its ordinary row.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `IDECaches.swift`. Version 0.5.6 (13).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. Bundle identifiers for the less common JetBrains
+  products were taken from their published app bundles, not verified against installed copies.
+
 ## 0.5.5 — DerivedData per project with last-built age, 30 October 2026
 
 - The whole-folder "Xcode DerivedData" rule is replaced by one Trash candidate per project
