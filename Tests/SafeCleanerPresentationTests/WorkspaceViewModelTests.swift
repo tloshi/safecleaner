@@ -1044,6 +1044,23 @@ import SafeCleanerCore
         XCTAssertTrue(vm.state.candidates.allSatisfy { !$0.isSelected })
     }
 
+
+    // MARK: Duplicate folders (0.5.9)
+
+    func testDuplicateFoldersAreListedAddedAndRemovedLikeProjectFolders() async {
+        let repository = FakeRepository()
+        repository.settings.duplicateRoots = [URL(fileURLWithPath: "/fixture/Downloads")]
+        let vm = WorkspaceViewModel(repository: repository, homePath: "/fixture", version: "t")
+        await vm.start()
+        XCTAssertEqual(vm.state.duplicateRoots.map(\.title), ["Downloads"])
+        await vm.send(.addDuplicateFolder)?.value
+        XCTAssertEqual(repository.duplicateAdds, 1)
+        vm.send(.removeDuplicateFolder("/fixture/Downloads"))
+        XCTAssertEqual(repository.settingsWrites, 1)
+        XCTAssertTrue(vm.state.duplicateRoots.isEmpty)
+        XCTAssertNil(vm.send(.removeDuplicateFolder("/fixture/nope")), "an unknown folder is ignored")
+    }
+
 }
 
 @MainActor private final class FakeRepository: CleaningRepository {
@@ -1100,6 +1117,11 @@ import SafeCleanerCore
     }
     func diskCapacity() async throws -> DiskCapacity { .init(total: 100, free: 20) }
     func addProjectFolders() async throws -> WorkspaceSettings { settingsWrites += 1; return settings }
+    var duplicateAdds = 0
+    func addDuplicateFolders() async throws -> WorkspaceSettings { duplicateAdds += 1; return settings }
+    func removeDuplicateFolder(_ url: URL) throws -> WorkspaceSettings {
+        settingsWrites += 1; settings.duplicateRoots.removeAll { $0 == url }; return settings
+    }
     func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings {
         settingsWrites += 1; settings.projectRoots.removeAll { $0 == url }; return settings
     }

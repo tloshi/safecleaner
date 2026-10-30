@@ -211,6 +211,26 @@ import SafeCleanerCore
             }
             activeTask = task
             return task
+        case .addDuplicateFolder:
+            guard state.canEditSettings else { return nil }
+            session.operation = .choosingFolder; publish()
+            let task = Task<Void, Never> { [weak self] in
+                guard let self else { return }
+                do { self.session.settings = try await self.repository.addDuplicateFolders() }
+                catch { self.session.message = error.localizedDescription }
+                self.session.operation = .idle; self.activeTask = nil; self.publish()
+            }
+            activeTask = task
+            return task
+        case .removeDuplicateFolder(let id):
+            guard state.canEditSettings, let root = session.settings.duplicateRoots.first(where: { $0.path == id }) else { return nil }
+            handle {
+                session.settings = try repository.removeDuplicateFolder(root)
+                session.candidates.removeAll { $0.category == .duplicates && FileSafety.isInside($0.url, root: root) }
+                session.selected.formIntersection(session.candidates.map(\.id))
+                invalidateAI()
+                closeConfirmation()
+            }
         case .removeProjectFolder(let id):
             guard state.canEditSettings, let root = session.settings.projectRoots.first(where: { $0.path == id }) else { return nil }
             handle {

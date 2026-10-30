@@ -81,7 +81,7 @@ import Foundation
 
     public func scan(progress: @escaping @Sendable (String) -> Void) async throws -> ScanReport {
         try await scanner.scan(configuration: .init(home: home, projectRoots: settings.projectRoots,
-            exclusions: settings.exclusions + settings.protectedProjects), progress: progress)
+            exclusions: settings.exclusions + settings.protectedProjects, duplicateRoots: settings.duplicateRoots), progress: progress)
     }
     public func diskCapacity() async throws -> DiskCapacity { try await disk.capacity() }
 
@@ -92,6 +92,20 @@ import Foundation
             try validator.validate(url)
             if !updated.projectRoots.contains(url) { updated.projectRoots.append(url) }
         }
+        return try persist(updated)
+    }
+    public func addDuplicateFolders() async throws -> WorkspaceSettings {
+        let urls = await desktop.chooseProjectFolders()
+        var updated = settings
+        for url in urls {
+            try validator.validate(url)
+            if !updated.duplicateRoots.contains(where: { FileSafety.isSame($0, url) }) { updated.duplicateRoots.append(url) }
+        }
+        return try persist(updated)
+    }
+    public func removeDuplicateFolder(_ url: URL) throws -> WorkspaceSettings {
+        var updated = settings
+        updated.duplicateRoots.removeAll { FileSafety.isSame($0, url) }
         return try persist(updated)
     }
     public func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings {

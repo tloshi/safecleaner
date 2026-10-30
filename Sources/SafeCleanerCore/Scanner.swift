@@ -4,9 +4,11 @@ public struct ScanConfiguration: Sendable {
     public var home: URL
     public var projectRoots: [URL]
     public var exclusions: [URL]
+    /// Folders searched for byte-identical files, in addition to the project roots.
+    public var duplicateRoots: [URL]
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser,
-                projectRoots: [URL] = [], exclusions: [URL] = []) {
-        self.home = home; self.projectRoots = projectRoots; self.exclusions = exclusions
+                projectRoots: [URL] = [], exclusions: [URL] = [], duplicateRoots: [URL] = []) {
+        self.home = home; self.projectRoots = projectRoots; self.exclusions = exclusions; self.duplicateRoots = duplicateRoots
     }
 }
 
@@ -228,6 +230,25 @@ public struct DiskScanner: Sendable {
         for finding in GradleStores.findings(home: c.home, references: gradleReferences, fm: fm, issues: &report.issues) {
             try add(finding.url, title: finding.title, category: .gradle, root: finding.root,
                     reason: finding.reason, consequence: finding.consequence, owner: GradleStores.owner)
+        }
+        // Byte-identical files in the project roots and the duplicate folders. The keeper is
+        // never a candidate; every other copy is an ordinary Trash row through `add`.
+        let duplicateRoots = (c.projectRoots + c.duplicateRoots).filter { !excluded($0) }
+        if !duplicateRoots.isEmpty {
+            progress("Duplicates")
+            do {
+                let found = try Duplicates.find(roots: duplicateRoots, home: c.home, exclusions: protected, fm: fm, progress: progress)
+                report.issues += found.issues
+                for set in found.sets {
+                    let keeper = DerivedData.abbreviate(set.keeper.path, home: c.home)
+                    for (copy, root) in zip(set.copies, set.copyRoots) {
+                        try add(copy, title: "\(copy.lastPathComponent) (duplicate)", category: .duplicates, root: root,
+                                reason: "Identical to \(keeper) (SHA-256 match). \(set.copies.count + 1) copies.",
+                                consequence: "Only this copy moves to Trash; the one at \(keeper) stays. Restore from Trash if it was the one you meant to keep.")
+                    }
+                }
+            } catch is CancellationError { throw CancellationError() }
+            catch { report.issues.append(.init(path: duplicateRoots[0].path, message: "Duplicates were not searched: \(error.localizedDescription)")) }
         }
         report.candidates.sort { $0.bytes > $1.bytes }
         report.projects.sort { $0.path < $1.path }

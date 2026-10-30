@@ -50,6 +50,31 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.9 — duplicate files by content hash, 30 October 2026
+
+- Exact duplicates (size, partial hash, full SHA-256) in the project roots and the new
+  duplicate folders, every copy but a deterministic keeper offered as a Trash row; a new
+  Duplicates category and a Settings card for the folders. Not measured on the author's Mac
+  in this pass: no duplicate folder is configured yet, and project roots are searched on the
+  next scan.
+- **Bug found by the fixture and fixed in three walks:** `FileManager.DirectoryEnumerator.
+  skipDescendants()` applies to the most recently obtained directory, so calling it when the
+  current entry is a symbolic link *file* skipped the neighbouring folder silently. The
+  duplicate walk, the project-activity walk (0.5.8) and the Xcode-stores walk (0.5.2) no
+  longer call it for a link. Hashing errors are issues now, not silently dropped files.
+- **240 XCTest tests passed:** 174 core, 59 presentation, 7 service. New tests cover the
+  collected file set, keeper choice, same-size different content, hard links, symlinks,
+  packages, dependencies, build output, hidden entries and small files, sensitive and
+  outside-home roots as issues, the file cap and byte budget as issues, scanner rows with the
+  keeper named and exclusions respected, project roots searched, and the Settings plumbing.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `Duplicates.swift`. Version 0.5.9 (16).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. A real duplicate search over a large folder was not
+  timed; the caps (200,000 files, 50 GB hashed) are the only bound.
+
 ## 0.5.8 — stale projects with activity ranking and anonymized AI rows, 30 October 2026
 
 - Per-project activity from local facts only (git reflog tail, source file dates with output,

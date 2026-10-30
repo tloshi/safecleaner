@@ -90,6 +90,7 @@ enum WorkspacePresenter {
         state.issues = session.issues
         func location(_ url: URL) -> LocationRowState { .init(id: url.path, title: url.lastPathComponent, path: url.path) }
         state.projectRoots = session.settings.projectRoots.map(location)
+        state.duplicateRoots = session.settings.duplicateRoots.map(location)
         state.exclusions = session.settings.exclusions.map(location)
         state.history = session.records.map { record in
             HistoryRowState(id: record.id, title: URL(fileURLWithPath: record.originalPath).lastPathComponent,

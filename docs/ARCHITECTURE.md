@@ -180,6 +180,23 @@ opens Review. `AIReviewPacket` gains `projects` rows (index, idle days, output M
 committed) capped at 12, and `localized(_:)` adds the real name after "project N" in Claude's
 text, locally.
 
+## Duplicates (0.5.9)
+
+`Duplicates` in Core has two stages. `collect` walks each root (the project roots plus
+`WorkspaceSettings.duplicateRoots`, each validated inside home and refused with an issue when
+it is a never-offer location) and keeps regular files of at least 1 MB with one link, skipping
+symbolic links, packages, hidden entries, dependencies, build output and the never-offer
+list; `skipDescendants` is only ever called for a directory, because Foundation applies it to
+the most recently obtained directory and calling it for a symlink file silently skipped the
+neighbouring folder (found by the fixture; the same pattern was fixed in the Xcode-stores and
+project-activity walks). `compare` groups by size, then by a partial SHA-256 (size, first and
+last 64 KB), then by a full streaming SHA-256 inside a byte budget; hashing errors become
+issues. The keeper is the shallowest, then oldest, then first path. The scanner turns every
+other copy into a `.duplicates` candidate through `add` with the folder it was found under as
+allowed root, so exclusions, the writability guard and the snapshot digest apply unchanged.
+`ScanConfiguration.duplicateRoots` and the repository's `addDuplicateFolders` /
+`removeDuplicateFolder` mirror project roots, persisted under `duplicateRoots`.
+
 ## Safety pack (0.5.3)
 
 `OpenFileChecking` in Core is a port that returns an `OpenFileIndex`: a point-in-time table of

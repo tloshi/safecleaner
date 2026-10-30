@@ -163,6 +163,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
 - Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Xcode device symbols below the newest OS version, documentation indexes, device logs idle for 30 days and archives older than 180 days (0.5.2).
+- Duplicates: byte-identical files of 1 MB or more in folders you choose and in your project folders, every copy but one offered, the original kept (0.5.9).
 - Stale projects: each project's last edit, commit and build read locally, a Stale badge after 60 idle days, a one-step selection of stale projects' build output, and anonymized project rows for the Claude review (0.5.8).
 - Docker images no container uses, stopped containers and build cache idle for 30 days, each removed by the docker command by ID, never volumes, never a bare prune (0.5.7).
 - IDE caches by version: older Android Studio and JetBrains caches offered one by one, the newest kept; VS Code and Cursor cache folders, never settings or workspace state (0.5.6).
@@ -252,6 +253,17 @@ unprotected projects in one step and opens Review, where nothing moves until you
 The Claude review receives the same facts anonymized as "project 1", "project 2" and so on
 (days since edit, days since build, output size, committed or not) and its answer is shown
 with the real name added locally; no name or path leaves your Mac.
+
+## Duplicates (0.5.9)
+
+Add folders under Settings ▸ Duplicate folders; your project folders are searched too.
+Files of 1 MB or more are grouped by size, then by a partial hash, then by a full SHA-256, so
+a match is exact. One copy is kept, chosen deterministically (the shallowest path, then the
+oldest file), and every other copy is listed under Duplicates as an ordinary Trash row whose
+reason names the kept file; nothing is preselected. Hard links are one file, not two;
+symbolic links, packages such as photo libraries, hidden entries, dependencies, build output
+and the never-offer list are left out. The walk and the bytes hashed are capped, and reaching
+a cap is reported, never hidden.
 
 ## Safety pack (0.5.3)
 

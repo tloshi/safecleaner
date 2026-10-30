@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable {
-    case developer, applications, browsers, logs, projects, simulators, android, xcode, gradle, docker
+    case developer, applications, browsers, logs, projects, simulators, android, xcode, gradle, docker, duplicates
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -15,6 +15,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .xcode: return "Xcode stores"
         case .gradle: return "Gradle & Kotlin"
         case .docker: return "Docker"
+        case .duplicates: return "Duplicates"
         }
     }
     public var symbol: String {
@@ -29,6 +30,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .xcode: return "wrench.adjustable"
         case .gradle: return "cube.transparent"
         case .docker: return "server.rack"
+        case .duplicates: return "doc.on.doc"
         }
     }
     public var detail: String {
@@ -43,6 +45,7 @@ public enum CleanCategory: String, CaseIterable, Codable, Sendable, Identifiable
         case .xcode: return "Older device symbols, documentation indexes, idle device logs and archives over 180 days old"
         case .gradle: return "Gradle versions and Kotlin/Native compilers no project names; shared dependency caches stay"
         case .docker: return "Images no container uses, stopped containers and build cache idle for 30 days, removed by the docker command"
+        case .duplicates: return "Byte-identical files in folders you choose; every copy but one, the original stays"
         }
     }
 }

@@ -141,7 +141,9 @@ public enum XcodeStores {
             seen += 1
             if seen > maxLogEntries { break }
             guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey]) else { continue }
-            if values.isSymbolicLink == true { enumerator.skipDescendants(); continue }
+            // Never followed by the enumerator; skipDescendants would act on the most recently
+            // obtained directory instead, so it is not called for a link.
+            if values.isSymbolicLink == true { continue }
             guard values.isDirectory != true, let date = values.contentModificationDate else { continue }
             if newest.map({ date > $0 }) ?? true { newest = date }
         }

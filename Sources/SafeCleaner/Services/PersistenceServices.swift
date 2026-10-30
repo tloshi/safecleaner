@@ -23,13 +23,15 @@ import SafeCleanerCore
             projectRoots: roots.map { URL(fileURLWithPath: $0) },
             exclusions: exclusions.map { URL(fileURLWithPath: $0) },
             protectedProjects: (defaults.stringArray(forKey: "protectedProjects") ?? []).map { URL(fileURLWithPath: $0) },
-            awaitingFullDiskAccess: defaults.bool(forKey: "awaitingFullDiskAccess"))
+            awaitingFullDiskAccess: defaults.bool(forKey: "awaitingFullDiskAccess"),
+            duplicateRoots: (defaults.stringArray(forKey: "duplicateRoots") ?? []).map { URL(fileURLWithPath: $0) })
     }
     func save(_ settings: WorkspaceSettings) throws {
         defaults.set(settings.projectRoots.map(\.path), forKey: "projectRoots")
         defaults.set(settings.exclusions.map(\.path), forKey: "exclusions")
         defaults.set(settings.protectedProjects.map(\.path), forKey: "protectedProjects")
         defaults.set(settings.awaitingFullDiskAccess, forKey: "awaitingFullDiskAccess")
+        defaults.set(settings.duplicateRoots.map(\.path), forKey: "duplicateRoots")
     }
 }
 

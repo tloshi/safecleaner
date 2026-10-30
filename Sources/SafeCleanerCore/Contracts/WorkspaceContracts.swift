@@ -7,9 +7,12 @@ public struct WorkspaceSettings: Equatable, Sendable {
     /// Set when the user was sent to the Full Disk Access pane. macOS applies that grant only
     /// after a relaunch, so the next launch reports the outcome once and clears this.
     public var awaitingFullDiskAccess: Bool
-    public init(projectRoots: [URL] = [], exclusions: [URL] = [], protectedProjects: [URL] = [], awaitingFullDiskAccess: Bool = false) {
+    /// Folders searched for byte-identical files, chosen by the user like project roots.
+    public var duplicateRoots: [URL]
+    public init(projectRoots: [URL] = [], exclusions: [URL] = [], protectedProjects: [URL] = [], awaitingFullDiskAccess: Bool = false,
+                duplicateRoots: [URL] = []) {
         self.projectRoots = projectRoots; self.exclusions = exclusions; self.protectedProjects = protectedProjects
-        self.awaitingFullDiskAccess = awaitingFullDiskAccess
+        self.awaitingFullDiskAccess = awaitingFullDiskAccess; self.duplicateRoots = duplicateRoots
     }
 }
 
@@ -145,6 +148,8 @@ public protocol OpenFileChecking: Sendable {
     func diskCapacity() async throws -> DiskCapacity
     func addProjectFolders() async throws -> WorkspaceSettings
     func removeProjectFolder(_ url: URL) throws -> WorkspaceSettings
+    func addDuplicateFolders() async throws -> WorkspaceSettings
+    func removeDuplicateFolder(_ url: URL) throws -> WorkspaceSettings
     func exclude(_ url: URL) throws -> WorkspaceSettings
     func removeExclusion(_ url: URL) throws -> WorkspaceSettings
     func clean(_ items: [Candidate], progress: @escaping @MainActor (CleanupProgress) -> Void) async throws -> CleanupBatchResult
@@ -171,6 +176,8 @@ extension CleaningRepository {
     }
     public func hasClaudeKey() throws -> Bool { false }
     public func acknowledgeFullDiskAccessOutcome() {}
+    public func addDuplicateFolders() async throws -> WorkspaceSettings { throw SafetyError.refused("Duplicate folders are unavailable in this workspace.") }
+    public func removeDuplicateFolder(_ url: URL) throws -> WorkspaceSettings { throw SafetyError.refused("Duplicate folders are unavailable in this workspace.") }
     public func applicationNames(for bundleIDs: [String]) -> [String: String] { [:] }
     public func quitApplication(_ bundleID: String) async -> AppQuitOutcome { .stillRunning }
     public func saveClaudeKey(_ key: String) async throws { throw SafetyError.refused("Claude is unavailable in this workspace.") }

@@ -246,6 +246,17 @@ nga imazhet në përdorim nuk ndikohen.
 
 ## 8. Faza 4 — disk explorer dhe dublikata
 
+**Dublikatat (0.5.9, 30 tetor 2026) — e implementuar:** skedarë bajt-për-bajt identikë ≥ 1 MB
+në folderët e zgjedhur (Settings ▸ Duplicate folders) dhe në folderët e projekteve: grupim sipas
+madhësisë, pastaj hash i pjesshëm (madhësia + 64 KB në fillim dhe fund), pastaj SHA-256 i plotë
+me buxhet bajtesh. Një kopje mbahet (rruga më e cekët, pastaj më e vjetra), çdo kopje tjetër
+ofrohet si rresht i zakonshëm Trash me arsyen që emërton skedarin e mbajtur; asgjë e
+parazgjedhur. Hard links janë një skedar; symlinks, paketa (Photos), hyrje të fshehura,
+varësi, build output dhe lista e vendeve që nuk ofrohen kurrë lihen jashtë. Kufijtë e ecjes
+dhe të hash-imit raportohen si issue. Fixtures në `DuplicatesTests.swift`. **Kufizime:** nuk
+ka ende grupim vizual sipas setit në Review; nuk kërkon në krejt home-in, vetëm në folderët e
+zgjedhur.
+
 - Skanim i gjerë vetëm për analizë, me hartë të folderëve, skedarë të mëdhenj dhe filtra.
 - Mbështetje për volumes të zgjedhura, pa dyfishim të APFS Data volume, mounts ose hard links.
 - Dublikata: grupim sipas madhësisë → hash → verifikim final; zgjedhje e kopjes që ruhet nga përdoruesi.

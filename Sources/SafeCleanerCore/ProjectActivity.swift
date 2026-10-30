@@ -110,7 +110,9 @@ public enum ProjectActivityScan {
             if seen > maxEntries { break }
             let name = url.lastPathComponent
             guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey]) else { continue }
-            if values.isSymbolicLink == true { enumerator.skipDescendants(); continue }
+            // A symbolic link is never followed by the enumerator; skipDescendants would act on
+            // the most recently obtained directory instead, so it is not called here.
+            if values.isSymbolicLink == true { continue }
             if values.isDirectory == true {
                 if skipped.contains(name) || name.hasPrefix(".") { enumerator.skipDescendants() }
                 continue

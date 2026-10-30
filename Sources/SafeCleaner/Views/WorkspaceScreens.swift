@@ -35,6 +35,30 @@ struct ProjectsView: View {
                         }
                     }
                 }
+                Card {
+                    VStack(alignment: .leading, spacing: 18) {
+                        HStack {
+                            Label("Duplicate folders", systemImage: "doc.on.doc").font(.headline)
+                            Spacer()
+                            Button { send(.addDuplicateFolder) } label: { Label("Add folder", systemImage: "plus") }
+                                .buttonStyle(PrimaryButton()).disabled(!state.canEditSettings)
+                        }
+                        Text("Byte-identical files of 1 MB or more are found in these folders and in your project folders. The original stays; every other copy is listed under Duplicates, nothing preselected.")
+                            .font(.system(size: 12)).foregroundStyle(Palette.muted)
+                        ForEach(state.duplicateRoots) { root in
+                            HStack(spacing: 14) {
+                                Image(systemName: "folder.fill").foregroundStyle(Palette.mint)
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(root.title).font(.system(size: 13, weight: .medium))
+                                    Text(root.path).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled)
+                                }
+                                Spacer()
+                                Button { send(.removeDuplicateFolder(root.id)) } label: { Image(systemName: "minus.circle") }
+                                    .buttonStyle(.plain).disabled(!state.canEditSettings).accessibilityLabel("Stop searching \(root.title) for duplicates")
+                            }.padding(.vertical, 10)
+                        }
+                    }
+                }
                 ProjectProtectionCard(state: state, send: send)
                 Card(accent: true) {
                     VStack(alignment: .leading, spacing: 12) {

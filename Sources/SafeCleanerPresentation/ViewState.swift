@@ -24,6 +24,7 @@ public enum WorkspaceAction {
     case toggleCandidate(String), toggleSelectAll, clearSelection, excludeCandidate(String), revealCandidate(String)
     case setProjectProtection(String, Bool), dismissResult, quitApp(String), selectRemaining, stopCleanup
     case addProjectFolder, removeProjectFolder(String), removeExclusion(String), revealHistory(UUID)
+    case addDuplicateFolder, removeDuplicateFolder(String)
     case openConfirmation, dismissConfirmation, acknowledge(Bool), confirmCleanup, dismissMessage
     case resetHistory, openFullDiskAccessSettings, selectStaleBuildOutput
     case claudeKeyChanged(String), saveClaudeKey, removeClaudeKey, claudeModelChanged(ClaudeModel)
@@ -165,6 +166,7 @@ public struct WorkspaceViewState {
     public internal(set) var confirmationHint: String?
     public internal(set) var projects: [ProjectRowState] = []
     public internal(set) var projectRoots: [LocationRowState] = []
+    public internal(set) var duplicateRoots: [LocationRowState] = []
     public internal(set) var exclusions: [LocationRowState] = []
     public internal(set) var history: [HistoryRowState] = []
     /// The stored history could not be read, so cleanup is paused until it is reset.
