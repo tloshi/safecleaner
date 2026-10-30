@@ -50,6 +50,28 @@
   consent. A probe was prepared and not run. The button reports "Still open" if the request is not
   delivered; if that happens for every app, add the entitlement and an `NSAppleEventsUsageDescription`.
 
+## 0.5.1 — Android NDK, system images and emulator snapshots, 30 October 2026
+
+- Version-aware Trash candidates, no process: NDK versions no project names except the newest
+  installed; system images no AVD uses; the `snapshots` folder of each stopped AVD (the
+  emulator's `hardware-qemu.ini.lock` marks a running one). Measured on the author's Mac this
+  offers NDK 25.1, 26.1 and 27.0 (7.5 GB; 28.2 is named and newest), two system images
+  (4.7 GB) and the Pixel 9 Pro snapshots (8.5 GB). No hard links or special files were found
+  in those trees, so the snapshot digest accepts them; interior symlinks are counted.
+- **165 XCTest tests passed:** 108 core, 52 presentation, 5 service. New tests cover reference parsing (Gradle quoting styles,
+  comments, `build/`-nested files ignored, Flutter's unresolved version flagged, `sdk.dir`,
+  AVD configs), the NDK rule (newest kept, named kept, prefix references), the image rule
+  (only directories with a real image, only unreferenced), the snapshot rule (running AVD
+  skipped with an issue, user data and the device itself never listed), scanner integration
+  (category, owner, exclusions) and an SDK outside home reported rather than scanned.
+- `check-boundaries.py` passed. Native arm64 Debug `xcodebuild` succeeded. Project regenerated
+  for `AndroidSDK.swift`. Version 0.5.1 (8).
+
+### Not performed
+
+- Nothing was moved on the author's Mac. Which NDK Flutter's `flutter.ndkVersion` resolves to
+  was not determined; the reason line says so and a build re-downloads a removed version.
+
 ## 0.5.0 — simulator runtimes and devices via simctl, 30 October 2026
 
 - First tool-managed adapter. The scan runs `xcrun simctl runtime list -j` and

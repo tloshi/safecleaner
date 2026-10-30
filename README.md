@@ -161,6 +161,7 @@ real in-app updates. Update checks would be a separate network feature from the 
 - Read-only scanning with progress and cancellation.
 - Targeted developer-cache rules: Xcode DerivedData, SwiftPM, npm `_cacache`, Gradle `build-cache-1`, CocoaPods, Homebrew downloads and pip.
 - Simulator runtimes and devices idle for 30 days, removed through `xcrun simctl` after review (0.5).
+- Android NDK versions and system images nothing names, and stopped emulators' snapshots (0.5.1).
 - Third-party immediate children of `~/Library/Caches`, individually reviewed; Apple caches are excluded.
 - Browser cache classification in user cache locations. Browser profiles are not targeted.
 - `.log` files under user logs that have not changed for over 30 days.
@@ -179,6 +180,13 @@ the row, in the selection summary, in the confirmation sheet and in Activity. Th
 runtime for each platform is always kept, a runtime with any booted or recently used device
 is kept, and every item is re-checked immediately before removal. Quit Simulator before
 cleaning; while it is open these items are left in place.
+
+## Android SDK (0.5.1)
+
+Scanning also lists NDK versions no project under your folders names (the newest installed
+stays), system images no virtual device uses, and the quick-boot snapshots of stopped
+emulators. These move to Trash like other items, which is what SDK Manager's uninstall does
+minus the way back. Device user data and configuration are never listed.
 
 ## Claude review (0.4)
 

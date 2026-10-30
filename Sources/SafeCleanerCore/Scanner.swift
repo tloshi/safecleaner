@@ -181,6 +181,13 @@ public struct DiskScanner: Sendable {
             } catch is CancellationError { throw CancellationError() }
             catch { report.issues.append(.init(path: root.path, message: error.localizedDescription)) }
         }
+        // Android SDK stores nothing names any more, and emulator snapshots. Version-aware:
+        // what a project or a virtual device still names is kept. Trash, like everything else.
+        let androidReferences = AndroidSDK.references(projects: report.projects, avdRoot: AndroidSDK.avdRoot(home: c.home), fm: fm)
+        for finding in AndroidSDK.findings(home: c.home, references: androidReferences, fm: fm, issues: &report.issues) {
+            try add(finding.url, title: finding.title, category: .android, root: finding.root,
+                    reason: finding.reason, consequence: finding.consequence, owner: AndroidSDK.owner)
+        }
         report.candidates.sort { $0.bytes > $1.bytes }
         report.projects.sort { $0.path < $1.path }
         report.finishedAt = Date()

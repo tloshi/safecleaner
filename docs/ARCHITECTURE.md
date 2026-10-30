@@ -98,6 +98,16 @@ an item in place if it no longer qualifies, mirroring the snapshot check on the 
 `LocalCleaningRepository.clean` dispatches by `removal`; `CleanupEngine` refuses tool-managed
 items outright. Histories record `method: tool`; older files decode with the field absent.
 
+## Android SDK stores (0.5.1)
+
+`AndroidSDK` in Core is version-aware listing with no process: it reads what projects name
+(`ndkVersion` in Gradle files near each detected project root, `sdk.dir` in
+`local.properties`) and what virtual devices use (`image.sysdir.1` in each AVD's
+`config.ini`), then offers NDK versions nobody names except the newest, system images no
+device uses, and the `snapshots` folder of every stopped AVD. Each finding becomes an
+ordinary Trash candidate through the scanner's `add`, so exclusions, the snapshot digest,
+the running-owner check (Android Studio) and the change re-check all apply unchanged.
+
 ## Optional Claude review (0.4)
 
 `AIReviewPacket` in Core groups candidates using a fixed label catalogue. The encoded payload

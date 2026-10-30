@@ -121,6 +121,17 @@ Activity. Simulator.app i hapur bllokon tërë grupin. Fixtures pozitive/negativ
 `SimulatorTests.swift`. **Kufizime:** nuk heq runtime të padisponueshëm dhe nuk prek
 `/Library/Developer/CoreSimulator/Caches`; nuk ka ende adapter për Docker, NDK ose AVD.
 
+**Android SDK (0.5.1, 30 tetor 2026) — e implementuar:** versionet e NDK-së që asnjë projekt nën
+folderët e zgjedhur nuk i emërton (`ndkVersion` në `build.gradle(.kts)`; versioni më i ri i
+instaluar ruhet gjithmonë; një referencë e pazgjidhur si `flutter.ndkVersion` deklarohet në
+arsye), system images që asnjë pajisje virtuale nuk i përdor (`image.sysdir.1` në `config.ini`
+të çdo AVD) dhe folderi `snapshots` i çdo AVD-je të fikur (kërkohet mungesa e
+`hardware-qemu.ini.lock`). Të treja shkojnë në Trash përmes rrugës ekzistuese me kontroll
+snapshot-i: `sdkmanager --uninstall` vetë vetëm fshin folderin, kështu që Trash është i njëjti
+veprim me rikthim. Kurrë `userdata-qemu.img*`, `sdcard.img`, `config.ini` ose vetë `.avd`.
+Pronari: Android Studio. SDK jashtë home nuk skanohet dhe raportohet. **Kufizime:** nuk prek
+`~/.gradle`, `~/.konan`, cache-t e Android Studio-s apo `platforms/`, `build-tools/`.
+
 **Docker:** inventar fillimisht. Volumes dhe të dhëna të containers nuk trajtohen si cache; asnjë komandë e përgjithshme prune pa listë konkrete dhe konfirmim.
 
 **Kriter përfundimi:** për çdo rregull, fixture pozitive/negative, dokumentacion aktual, kontroll aktiviteti dhe provë se projekti rindërtohet. Pa fshirje masive të folderëve me emër të zakonshëm.
