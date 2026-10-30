@@ -54,9 +54,11 @@
 
 - Exact duplicates (size, partial hash, full SHA-256) in the project roots and the new
   duplicate folders, every copy but a deterministic keeper offered as a Trash row; a new
-  Duplicates category and a Settings card for the folders. Not measured on the author's Mac
-  in this pass: no duplicate folder is configured yet, and project roots are searched on the
-  next scan.
+  Duplicates category and a Settings card for the folders. Measured read-only on the author's
+  Mac over `~/AndroidStudioProjects` inside a 67 s whole scan: 14 duplicate rows, 35.6 MB,
+  all real (PDFs copied between two projects, a video present four times across projects,
+  five identical temp HTML files). Downloads and Documents could not be searched from the
+  shell: both are privacy-protected, so that search happens in the app after its prompt.
 - **Bug found by the fixture and fixed in three walks:** `FileManager.DirectoryEnumerator.
   skipDescendants()` applies to the most recently obtained directory, so calling it when the
   current entry is a symbolic link *file* skipped the neighbouring folder silently. The
@@ -81,8 +83,13 @@
   dependencies and `.git` skipped, output dates, DerivedData joined by `WorkspacePath`); a
   Stale badge after 60 idle days; "Select stale build output" selecting only stale,
   unprotected projects' output and opening Review; anonymized project rows in the Claude
-  packet with the name added back locally. Not measured on the author's Mac in this pass:
-  the next scan shows the badges.
+  packet with the name added back locally. Measured read-only on the author's Mac with the
+  app's Core code over `~/AndroidStudioProjects` (25 projects, whole scan 67 s): 14 projects
+  are stale by the 60-day rule and every one of them holds no build output, because the
+  author cleans weekly; the 28 GB of output sits in the three active projects (netwrk-kmm
+  11.8 GB, fjaloriv2 8.7 GB, quitty 7 GB), so "Select stale build output" rightly offers
+  nothing today. Four `node_modules` folders were refused as hard-linked (pnpm-style links),
+  which is a coverage gap, not a rule error.
 - **233 XCTest tests passed:** 168 core, 58 presentation, 7 service. New tests cover reflog
   parsing (a worktree pointer file ignored, a `.git` without logs), source dates ignoring
   build output and dependencies, output linking including DerivedData, the stale rule at the
